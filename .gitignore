@@ -1,0 +1,20 @@
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Runtime / generated files
+app_errors.log
+*.log
+reports/
+backups/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
