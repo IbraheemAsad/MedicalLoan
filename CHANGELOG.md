@@ -3,6 +3,104 @@
 All notable changes to this project will be documented here. Versions
 follow the phases in `.kiro/steering/improvement-plan.md`.
 
+## [Unreleased] — Phase 5: Polish
+
+### Added
+- `medicalloan/preferences.py` -- frozen `Preferences` dataclass with
+  `load(config)` / `save(config, prefs, path)` for the new
+  `[Preferences]` section in `config.ini`. Stores `lang`, `theme`,
+  `font_size`, and last window `geometry`. Out-of-range font sizes
+  are clamped on load; unknown lang/theme values fall back to
+  defaults rather than raising, so a hand-edited `.ini` can never
+  crash startup.
+- `MedicalEquipmentApp` now reads preferences in `__init__` (instead
+  of the old hardcoded `lang='he'`, `theme='light'`, `font_size=14`)
+  and calls `_save_preferences()` from `toggle_theme`, the
+  language-flag buttons, the font +/- buttons, and `_on_close`.
+- Global keyboard shortcuts (`Control-N` new loan, `Control-R`
+  process return, `Control-I` inventory, `Control-B` borrowers,
+  `Control-P` reports, `Control-H` dashboard) bound on the Tk root
+  via `_bind_global_shortcuts`. Both lower- and upper-case
+  variants are bound so Caps Lock doesn't surprise the operator.
+- `medicalloan/ui/dialogs.py` got localized wrappers
+  (`error`/`info`/`warn`/`askyesno`) that look the dialog title up
+  in the active i18n table (`error_title`, `success_title`,
+  `warning_title`, `confirm_title`) -- the legacy code passed
+  literal `"Error"` / `"Success"` strings, which left the title bar
+  English even in HE/AR. New `bind_dialog_keys(dialog, on_confirm=...)`
+  wires `Esc` to close and (optionally) `Enter`/`KP_Enter` to
+  confirm, so form dialogs feel keyboard-native.
+- `medicalloan/ui/status_bar.py` -- thin status strip rendered along
+  the bottom of every screen by `app.show_global_controls()`. Shows
+  `Lang: <code>  |  DB: <basename>` plus a clickable
+  unread-error-bytes button when `app_errors.log` has grown since
+  the last "mark read" (offset stored in
+  `[Preferences].errors_seen_offset`). The byte counter
+  (`unread_error_bytes`) is module-level so tests can import it
+  without touching Tk.
+- Restore-from-backup UI: the Data Management popup now has a
+  **♻ Restore from Backup** button. It lists timestamped
+  `backup_*.db` files under `<db_dir>/backups/` (newest first),
+  takes a `pre_restore_<timestamp>.db` safety copy of the live DB,
+  copies the chosen backup over it, then exits the app so the
+  operator relaunches on the restored file.
+- `services/backup_service.py` got two new public functions:
+  `list_backups(backup_dir)` (newest-first) and
+  `restore_backup(backup_path, db_path)` (returns the safety-copy
+  path it just wrote).
+- Inventory view: `<Double-1>` on a row now opens the Edit
+  Equipment dialog (was: select-then-press-Edit).
+- Borrowers view: `<Double-1>` on a row now opens the Loan History
+  popup (mirrors the inventory ergonomics).
+- `scripts/build_exe.py` -- PyInstaller helper that bundles `fonts/`,
+  `Icons/`, and `config.ini`, threads `arabic_reshaper` /
+  `bidi.algorithm` / `PIL._tkinter_finder` etc. as
+  `--hidden-import`s, and writes a single-file binary to `dist/`.
+  Runs `--windowed` so Windows users don't get a stray console.
+- New CI jobs: `test` runs `pytest -q` against the repo on every
+  push, and `build` runs `scripts/build_exe.py` and uploads the
+  resulting `dist/medicalloan*` as a `medicalloan-linux` artifact.
+  The build job depends on the existing `syntax` job to avoid
+  burning minutes on broken commits.
+- `tests/test_preferences.py`, `tests/test_status_bar.py`, and
+  `tests/test_backup_restore.py` -- round-trip tests for the new
+  preferences module, the unread-error byte counter, and the new
+  `list_backups` / `restore_backup` helpers (including the
+  pre-restore safety copy).
+- New i18n keys for every supported language (`en`, `he`, `ar`):
+  `error_title`, `warning_title`, `confirm_title`,
+  `data_management`, `data_management_subtitle`,
+  `btn_export_excel`, `btn_import_excel`, `btn_restore_backup`,
+  `restore_title`, `restore_select`, `restore_no_backups`,
+  `restore_button`, `confirm_restore_msg`, `restore_success`,
+  `restore_failed`, `status_lang`, `status_db`,
+  `status_unread_errors`, `shortcuts_help`. Each language gets
+  152 keys total (was 133).
+
+### Changed
+- `MedicalEquipmentApp.__init__` no longer hardcodes `'he'` /
+  `'light'` / `14`; the previous defaults are now wherever
+  `medicalloan.preferences` keeps them, so a future change to the
+  shipped defaults touches one constant.
+- `MedicalEquipmentApp._on_close` calls `_save_preferences()` before
+  closing the database, so the next launch restores the last
+  language / theme / font / window geometry.
+- The "Excel Export / Import" dashboard button is now localised
+  (uses `data_management`) instead of being an English literal that
+  stuck out in HE/AR.
+- Most view modules now use the localised `ui_dialogs.error/info/warn`
+  helpers; `messagebox.askyesno` calls already had translated titles
+  via `app.i18n[app.lang][...]` and were left as-is.
+
+### Notes for operators
+- After upgrading, the first time you change the language / theme /
+  font size or close the window, a `[Preferences]` section is
+  appended to `config.ini`. Hand-edits to that section are honoured
+  on the next launch.
+- The pre-restore safety copies (`pre_restore_*.db`) are *not*
+  pruned by the backup retention policy. Clean them up manually
+  after you've confirmed the restored DB is healthy.
+
 ## [Unreleased] — Phase 2: Database hardening
 
 ### Added

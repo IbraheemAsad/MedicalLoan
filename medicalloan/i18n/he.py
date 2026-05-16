@@ -150,4 +150,40 @@ STRINGS: dict[str, object] = {
     'err_borrower_exists': ".קיים כבר שואל עם מספר תעודת זהות זה",
     'btn_edit_details': "ערוך פרטים",
     'btn_change_borrower': "החלף / חדש",
+    # --- Phase 5 additions --------------------------------------------
+    'error_title': "שגיאה",
+    'warning_title': "אזהרה",
+    'confirm_title': "אישור",
+    'data_management': "ניהול נתונים",
+    'data_management_subtitle': "ניהול נתוני אקסל",
+    'btn_export_excel': "ייצוא מסד הנתונים לאקסל",
+    'btn_import_excel': "ייבוא מסד נתונים מאקסל",
+    'btn_restore_backup': "שחזור מגיבוי",
+    'restore_title': "שחזור מסד הנתונים מגיבוי",
+    'restore_select': "בחר גיבוי לשחזור. תחילה תישמר עותק בטיחותי של "
+                      "מסד הנתונים הנוכחי.",
+    'restore_no_backups': "אין גיבויים זמינים לשחזור.",
+    'restore_button': "שחזר נבחר",
+    'confirm_restore_msg': (
+        "האם לשחזר את מסד הנתונים מגיבוי זה?\n\n{name}\n\n"
+        "הנתונים הנוכחיים יישמרו תחילה כעותק בטיחותי.\n"
+        "היישום ייסגר לאחר השחזור כדי לפתוח מחדש את המסד המשוחזר."
+    ),
+    'restore_success': (
+        "מסד הנתונים שוחזר מגיבוי.\n\nעותק בטיחותי של המצב הקודם: "
+        "{safety}\n\nהיישום ייסגר כעת."
+    ),
+    'restore_failed': "שחזור הגיבוי נכשל: {e}",
+    'status_lang': "שפה",
+    'status_db': "DB",
+    'status_unread_errors': "שגיאות חדשות",
+    'shortcuts_help': (
+        "מקשי קיצור:\n"
+        "Ctrl+N  השאלה חדשה\n"
+        "Ctrl+R  קבלת החזרה\n"
+        "Ctrl+I  מלאי\n"
+        "Ctrl+B  שואלים\n"
+        "Ctrl+P  דוחות\n"
+        "Ctrl+H  לוח ראשי"
+    ),
 }

@@ -48,4 +48,57 @@ jobs:
           cache: pip
 
       - name: Byte-compile project
-        run: python -m compileall -q main.py database.py reports.py
+        run: python -m compileall -q main.py database.py reports.py medicalloan/ services/
+
+  test:
+    name: Pytest (unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run pytest
+        # The Tk-using tests are skipped on headless CI by the import
+        # gate inside conftest; this still exercises DB / preferences
+        # / backup / report renderer tests.
+        run: pytest -q
+
+  build:
+    name: Build single-file executable
+    runs-on: ubuntu-latest
+    # Needs the lint/syntax jobs to be green before we burn build
+    # minutes on a known-broken commit.
+    needs: [syntax]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime deps + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller==6.10.0
+
+      - name: Build executable
+        run: python scripts/build_exe.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicalloan-linux
+          path: dist/medicalloan*
+          if-no-files-found: error
+          retention-days: 14

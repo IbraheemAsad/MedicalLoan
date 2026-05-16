@@ -1,15 +1,23 @@
 """Dialog helpers shared across views.
 
-Currently this module exposes a single function -- ``setup_dialog_window`` --
-extracted from ``MedicalEquipmentApp.setup_dialog_window``. Future polish
-work (Phase 5) will likely add ``confirm()`` and ``ask_yes_no()`` wrappers
-that thread translated titles automatically; for now we keep parity with
-the legacy behaviour so views can move with a single rename.
+Phase 3 introduced :func:`setup_dialog_window`. Phase 5 layered two
+small additions on top:
+
+* ``error`` / ``info`` / ``warn`` / ``askyesno`` wrappers that pull
+  the dialog *title* from the active i18n table (keys
+  ``error_title``, ``success_title``, ``warning_title``,
+  ``confirm_title``) so the title bar is no longer "Error" in
+  Hebrew/Arabic UIs.
+* ``bind_dialog_keys`` -- a one-liner that binds ``<Escape>`` to
+  close and (optionally) ``<Return>`` to a confirm action so form
+  dialogs feel keyboard-native.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import messagebox
+from typing import Callable
 
 
 def setup_dialog_window(
@@ -52,3 +60,69 @@ def setup_dialog_window(
     y = root_y + (root_h // 2) - (height // 2)
 
     dialog.geometry(f'{width}x{height}+{x}+{y}')
+
+
+# ---------------------------------------------------------------------------
+# Localised messagebox wrappers (Phase 5)
+# ---------------------------------------------------------------------------
+
+def _title_for(app, key: str, fallback: str) -> str:
+    """Look up a translated title with a sensible fallback.
+
+    The legacy code passed literal English strings as the title arg
+    to messagebox calls. Phase 5 adds matching keys to the i18n
+    tables (``error_title`` etc.); this helper degrades gracefully if
+    a key happens to be missing in some language (returns the English
+    fallback rather than raising).
+    """
+    try:
+        return app.i18n[app.lang].get(key, fallback)
+    except (AttributeError, KeyError):
+        return fallback
+
+
+def error(app, message: str, *, title_key: str = "error_title") -> None:
+    """Localised wrapper for ``messagebox.showerror``."""
+    messagebox.showerror(_title_for(app, title_key, "Error"), message)
+
+
+def info(app, message: str, *, title_key: str = "success_title") -> None:
+    """Localised wrapper for ``messagebox.showinfo``."""
+    messagebox.showinfo(_title_for(app, title_key, "Success"), message)
+
+
+def warn(app, message: str, *, title_key: str = "warning_title") -> None:
+    """Localised wrapper for ``messagebox.showwarning``."""
+    messagebox.showwarning(_title_for(app, title_key, "Warning"), message)
+
+
+def askyesno(app, message: str, *, title_key: str = "confirm_title") -> bool:
+    """Localised wrapper for ``messagebox.askyesno``."""
+    return bool(
+        messagebox.askyesno(_title_for(app, title_key, "Confirm"), message),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Keyboard ergonomics (Phase 5)
+# ---------------------------------------------------------------------------
+
+def bind_dialog_keys(
+    dialog: tk.Toplevel,
+    *,
+    on_confirm: Callable[[], None] | None = None,
+) -> None:
+    """Wire ``Esc`` to close the dialog and optionally ``Enter`` to confirm.
+
+    Skipping ``on_confirm`` (the default) is appropriate for popups
+    that are pure information displays (history viewer, summary
+    table); they only get the Escape binding so the user can dismiss
+    them without reaching for the mouse.
+    """
+    dialog.bind("<Escape>", lambda _e: dialog.destroy())
+    if on_confirm is not None:
+        # ``Return`` only fires when the dialog itself has focus, so
+        # we add KP_Enter (numeric keypad) too -- some keyboards
+        # report it separately.
+        dialog.bind("<Return>", lambda _e: on_confirm())
+        dialog.bind("<KP_Enter>", lambda _e: on_confirm())

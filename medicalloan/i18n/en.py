@@ -150,4 +150,41 @@ STRINGS: dict[str, object] = {
     'err_borrower_exists': "A borrower with this ID Number already exists.",
     'btn_edit_details': "Edit Details",
     'btn_change_borrower': "Change / New",
+    # --- Phase 5 additions --------------------------------------------
+    'error_title': "Error",
+    'warning_title': "Warning",
+    'confirm_title': "Confirm",
+    'data_management': "Data Management",
+    'data_management_subtitle': "Excel Data Management",
+    'btn_export_excel': "Export Database to Excel",
+    'btn_import_excel': "Import Database from Excel",
+    'btn_restore_backup': "Restore from Backup",
+    'restore_title': "Restore Database from Backup",
+    'restore_select': "Select a backup to restore. The current database will "
+                       "be saved as a safety copy first.",
+    'restore_no_backups': "No backups available to restore.",
+    'restore_button': "Restore Selected",
+    'confirm_restore_msg': (
+        "Restore the database from this backup?\n\n{name}\n\n"
+        "Your current data will be saved as a safety copy first.\n"
+        "The application will close after the restore so you can "
+        "reopen it on the restored database."
+    ),
+    'restore_success': (
+        "Database restored from backup.\n\nSafety copy of previous "
+        "state: {safety}\n\nThe application will now close."
+    ),
+    'restore_failed': "Failed to restore backup: {e}",
+    'status_lang': "Lang",
+    'status_db': "DB",
+    'status_unread_errors': "New errors",
+    'shortcuts_help': (
+        "Keyboard shortcuts:\n"
+        "Ctrl+N  New Loan\n"
+        "Ctrl+R  Process Return\n"
+        "Ctrl+I  Inventory\n"
+        "Ctrl+B  Borrowers\n"
+        "Ctrl+P  Reports\n"
+        "Ctrl+H  Dashboard"
+    ),
 }
