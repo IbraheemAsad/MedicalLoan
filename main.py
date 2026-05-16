@@ -2,19 +2,20 @@
 Main GUI Application for Medical Equipment Loan Management System
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-from tkinter import font as tkfont
-from datetime import datetime
-import pandas as pd
-from tkinter import filedialog
 import configparser
-import sqlite3
-import logging
-import shutil
 import glob
-import sys
+import logging
 import os
+import shutil
+import sqlite3
+import sys
+import tkinter as tk
+from datetime import datetime
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import font as tkfont
+
+import pandas as pd
+
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -40,7 +41,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import Database
 from reports import ReportGenerator
-
 
 # ============ Internationalization (i18n) Strings ============
 
@@ -73,7 +73,7 @@ I18N_STRINGS = {
             'Returned': 'Returned',
             'Not Returned': 'Not Returned',
             'Lost': 'Lost',
-            'Active': 'OnLoan'
+            'Active': 'On-Loan'
         },
         'edit_selected': "Edit Selected",
         'view_summary': "View Summary",
@@ -128,6 +128,7 @@ I18N_STRINGS = {
         'confirm_print': "Confirm & Print Agreement",
         'err_fill_required': "Please fill in all required fields (*)",
         'err_invalid_deposit_donation': "Invalid deposit or donation amount",
+        'err_id_length': "ID Number must be exactly 9 digits (or '-' to skip).",
         'err_create_loan_fail': "Failed to create loan: {e}",
         'success_loan_created': "Loan created successfully!\nLoan ID: {id}\n\nThe loan agreement has been opened for printing.",
         'warn_agreement_fail': "Loan created but failed to generate agreement: {e}",
@@ -269,6 +270,7 @@ I18N_STRINGS = {
         'confirm_print': "אישור והדפסת הסכם",
         'err_fill_required': "(*) אנא מלא את כל שדות החובה",
         'err_invalid_deposit_donation': "סכום פיקדון או תרומה שגוי",
+        'err_id_length': "מספר תעודת זהות חייב להכיל בדיוק 9 ספרות (או '-' לדילוג).",
         'err_create_loan_fail': "נכשל ביצירת השאלה: {e}",
         'success_loan_created': "השאלה נוצרה בהצלחה!\nמספר השאלה: {id}\n\nהסכם ההשאלה נפתח להדפסה.",
         'warn_agreement_fail': "ההשאלה נוצרה אך יצירת ההסכם נכשלה: {e}",
@@ -410,6 +412,7 @@ I18N_STRINGS = {
         'confirm_print': "تأكيد وطباعة الاتفاقية",
         'err_fill_required': "(*) يرجى ملء جميع الحقول المطلوبة",
         'err_invalid_deposit_donation': "مبلغ التأمين أو التبرع غير صالح",
+        'err_id_length': "يجب أن يتكون رقم الهوية من 9 أرقام بالضبط (أو '-' للتخطي).",
         'err_create_loan_fail': "فشل في إنشاء الإعارة: {e}",
         'success_loan_created': "تم إنشاء الإعارة بنجاح!\nرقم الإعارة: {id}\n\nتم فتح اتفاقية الإعارة للطباعة.",
         'warn_agreement_fail': "تم إنشاء الإعارة ولكن فشل إنشاء الاتفاقية: {e}",
@@ -514,7 +517,7 @@ class MedicalEquipmentApp:
 
         self.root.title(self.i18n[self.lang]['window_title'])
         try:
-            icon_path = resource_path(os.path.join('icons', 'app_icon.ico'))
+            icon_path = resource_path(os.path.join('Icons', 'app_icon.ico'))
             self.root.iconbitmap(icon_path)
         except Exception:
             pass  # Use default if missing
@@ -561,7 +564,7 @@ class MedicalEquipmentApp:
 
     def load_icons(self):
         """Load and process icons based on the current theme"""
-        icon_path = resource_path('icons')
+        icon_path = resource_path('Icons')
 
         icon_map = {
             'new_loan': 'NewLoan.png',
@@ -638,13 +641,14 @@ class MedicalEquipmentApp:
         """
         1. Makes the window Modal (blocks main app).
         2. Auto-sizes the window to fit content perfectly.
-        3. Centers the window on the screen.
+        3. Centers the window on the parent window's monitor.
         """
         # 1. Make Modal (Block main window)
         dialog.transient(self.root)
         dialog.grab_set()
 
-        # 2. Update the window to calculate required size
+        # 2. Update both windows to ensure geometry is settled
+        self.root.update_idletasks()
         dialog.update_idletasks()
 
         # Get the calculated size based on widgets
@@ -655,12 +659,22 @@ class MedicalEquipmentApp:
         if width < min_width:
             width = min_width
 
-        # 3. Calculate Center Position
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
+        # 3. Calculate Center Position relative to the root window
+        # (so dialogs appear on the same monitor as the main app)
+        parent_x = self.root.winfo_rootx()
+        parent_y = self.root.winfo_rooty()
+        parent_w = self.root.winfo_width()
+        parent_h = self.root.winfo_height()
 
-        x = (screen_width // 2) - (width // 2)
-        y = (screen_height // 2) - (height // 2)
+        # Fall back to screen if root has no real geometry yet
+        if parent_w <= 1 or parent_h <= 1:
+            parent_x = 0
+            parent_y = 0
+            parent_w = self.root.winfo_screenwidth()
+            parent_h = self.root.winfo_screenheight()
+
+        x = parent_x + (parent_w // 2) - (width // 2)
+        y = parent_y + (parent_h // 2) - (height // 2)
 
         # Apply geometry (Size + Position)
         dialog.geometry(f'{width}x{height}+{x}+{y}')
@@ -668,12 +682,16 @@ class MedicalEquipmentApp:
     def auto_size_treeview_columns(self, tree):
         """Auto-sizes all columns in a Treeview to fit their content AND sets text alignment."""
 
-        # Use a standard font for measuring
+        # Use a standard font for measuring; pull from the ttk.Style instead of
+        # tree.cget("font") which often returns the style name, not a font.
+        font = None
         try:
-            # Try to get the font from the treeview's style
-            font = tkfont.Font(font=tree.cget("font"))
-        except:
-            # Fallback to a default
+            style_font = ttk.Style().lookup('Treeview', 'font')
+            if style_font:
+                font = tkfont.nametofont(style_font) if isinstance(style_font, str) else tkfont.Font(font=style_font)
+        except (tk.TclError, RuntimeError):
+            font = None
+        if font is None:
             font = tkfont.Font(family="Helvetica", size=self.base_font_size)
 
         # Get all column identifiers
@@ -1092,17 +1110,6 @@ class MedicalEquipmentApp:
             btn = ttk.Button(button_frame, text=text, command=command,
                              style='Large.TButton', width=25,
                              image=icon, compound=tk.TOP)
-            btn.grid(row=row, column=grid_col, padx=20, pady=15)
-
-        for i, (text, command, icon) in enumerate(buttons):
-            row = i // 2
-            col = i % 2
-
-            grid_col = 1 - col if is_rtl else col
-
-            btn = ttk.Button(button_frame, text=text, command=command,
-                           style='Large.TButton', width=25,
-                           image=icon, compound=tk.TOP)
             btn.grid(row=row, column=grid_col, padx=20, pady=15)
 
     def show_data_menu(self):
@@ -1998,7 +2005,7 @@ class MedicalEquipmentApp:
                     return
 
                 if id_number != '-' and len(id_number) != 9:
-                    messagebox.showerror("Error", "ID Number must be exactly 9 digits (or '-' to skip).")
+                    messagebox.showerror("Error", self.i18n[self.lang]['err_id_length'])
                     return
 
                 if borrower_data['borrower_id']:
@@ -2692,7 +2699,7 @@ class MedicalEquipmentApp:
                 return
 
             if id_num != '-' and len(id_num) != 9:
-                messagebox.showerror("Error", "ID Number must be exactly 9 digits (or '-' to skip).")
+                messagebox.showerror("Error", self.i18n[self.lang]['err_id_length'])
                 return
 
             try:
@@ -2903,11 +2910,24 @@ class MedicalEquipmentApp:
             self.config.read(config_path, encoding='utf-8')
 
 
+def _resolve_data_dir():
+    """Return the directory where the DB / logs / backups live.
+
+    Mirrors the logic used by Database() so the log file is co-located with
+    the database, regardless of CWD or PyInstaller bundling.
+    """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 def main():
     # --- LOGGING SETUP ---
-    # Log file will be created next to the executable/script
+    # Log file lives next to the database (not the CWD), so behavior is
+    # consistent whether launched from a shortcut, terminal, or PyInstaller exe.
+    log_path = os.path.join(_resolve_data_dir(), 'app_errors.log')
     logging.basicConfig(
-        filename='app_errors.log',
+        filename=log_path,
         level=logging.ERROR,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
@@ -2919,12 +2939,26 @@ def main():
             return
         logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
         # Optional: Show a popup to the user saying "Check the logs"
-        messagebox.showerror("Critical Error", f"An error occurred. See app_errors.log.\n\n{exc_value}")
+        messagebox.showerror(
+            "Critical Error",
+            f"An error occurred. See app_errors.log.\n\n{exc_value}"
+        )
 
     sys.excepthook = handle_exception
 
     root = tk.Tk()
     app = MedicalEquipmentApp(root)
+
+    # Ensure the database connection is closed cleanly when the user closes
+    # the window (X button or Alt-F4).
+    def _on_close():
+        try:
+            app.db.close()
+        except Exception:
+            logging.exception("Error closing database on shutdown")
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", _on_close)
     root.mainloop()
 
 

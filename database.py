@@ -3,11 +3,10 @@ Database module for Medical Equipment Loan Management System
 Handles all database operations using SQLite
 """
 
-import sqlite3
-from datetime import datetime
-from typing import List, Dict, Optional, Tuple
 import os
+import sqlite3
 import sys
+from datetime import datetime
 
 
 class Database:
@@ -28,16 +27,32 @@ class Database:
         self.conn = None
         self.connect()
         self.create_tables()
-    
+
     def connect(self):
-        """Establish database connection"""
+        """Establish database connection (idempotent: closes any prior handle)."""
+        # Close any previous handle so repeated calls don't leak file handles.
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except sqlite3.Error:
+                pass
+
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row  # Enable column access by name
-    
+
+        # Enforce referential integrity (SQLite requires this per-connection).
+        # Use WAL for better concurrent reads and crash-safety, and NORMAL
+        # synchronous which pairs well with WAL on desktop apps.
+        cursor = self.conn.cursor()
+        cursor.execute('PRAGMA foreign_keys = ON')
+        cursor.execute('PRAGMA journal_mode = WAL')
+        cursor.execute('PRAGMA synchronous = NORMAL')
+        self.conn.commit()
+
     def create_tables(self):
         """Create all necessary tables"""
         cursor = self.conn.cursor()
-        
+
         # Equipment table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS equipment (
@@ -50,7 +65,7 @@ class Database:
                 created_date TEXT NOT NULL
             )
         ''')
-        
+
         # Borrower table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS borrower (
@@ -63,7 +78,7 @@ class Database:
                 created_date TEXT NOT NULL
             )
         ''')
-        
+
         # Loan table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS loan (
@@ -82,64 +97,64 @@ class Database:
                 FOREIGN KEY (equipment_id) REFERENCES equipment(id)
             )
         ''')
-        
+
         self.conn.commit()
-    
+
     # ============ EQUIPMENT METHODS ============
-    
-    def add_equipment(self, item_name: str, description: str, serial_number: str, 
+
+    def add_equipment(self, item_name: str, description: str, serial_number: str,
                      deposit_amount: float) -> int:
         """Add new equipment to inventory"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT INTO equipment (item_name, description, serial_number, 
+            INSERT INTO equipment (item_name, description, serial_number,
                                  deposit_amount, created_date)
             VALUES (?, ?, ?, ?, ?)
-        ''', (item_name, description, serial_number, deposit_amount, 
+        ''', (item_name, description, serial_number, deposit_amount,
               datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         self.conn.commit()
         return cursor.lastrowid
-    
-    def get_equipment(self, equipment_id: int) -> Optional[Dict]:
+
+    def get_equipment(self, equipment_id: int) -> dict | None:
         """Get equipment by ID"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM equipment WHERE id = ?', (equipment_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
-    
-    def get_all_equipment(self) -> List[Dict]:
+
+    def get_all_equipment(self) -> list[dict]:
         """Get all equipment"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM equipment ORDER BY item_name')
         return [dict(row) for row in cursor.fetchall()]
-    
-    def search_equipment(self, search_term: str) -> List[Dict]:
+
+    def search_equipment(self, search_term: str) -> list[dict]:
         """Search equipment by name or serial number"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT * FROM equipment 
+            SELECT * FROM equipment
             WHERE item_name LIKE ? OR serial_number LIKE ?
             ORDER BY item_name
         ''', (f'%{search_term}%', f'%{search_term}%'))
         return [dict(row) for row in cursor.fetchall()]
-    
-    def get_available_equipment(self, item_name: str = None) -> List[Dict]:
+
+    def get_available_equipment(self, item_name: str = None) -> list[dict]:
         """Get equipment that is available (In-Stock status)"""
         cursor = self.conn.cursor()
         if item_name:
             cursor.execute('''
-                SELECT * FROM equipment 
+                SELECT * FROM equipment
                 WHERE status = 'In-Stock' AND item_name LIKE ?
                 ORDER BY item_name
             ''', (f'%{item_name}%',))
         else:
             cursor.execute('''
-                SELECT * FROM equipment 
+                SELECT * FROM equipment
                 WHERE status = 'In-Stock'
                 ORDER BY item_name
             ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def update_equipment_status(self, equipment_id: int, status: str):
         """Update equipment status"""
         cursor = self.conn.cursor()
@@ -147,121 +162,121 @@ class Database:
             UPDATE equipment SET status = ? WHERE id = ?
         ''', (status, equipment_id))
         self.conn.commit()
-    
+
     def update_equipment(self, equipment_id: int, item_name: str, description: str,
                         serial_number: str, deposit_amount: float):
         """Update equipment details"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            UPDATE equipment 
+            UPDATE equipment
             SET item_name = ?, description = ?, serial_number = ?, deposit_amount = ?
             WHERE id = ?
         ''', (item_name, description, serial_number, deposit_amount, equipment_id))
         self.conn.commit()
-    
-    def get_equipment_summary(self) -> List[Dict]:
+
+    def get_equipment_summary(self) -> list[dict]:
         """Get summary of ACTIVE equipment (excludes Lost items)"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT 
+            SELECT
                 item_name,
                 COUNT(*) as total_count,
                 SUM(CASE WHEN status = 'In-Stock' OR status = 'Returned' THEN 1 ELSE 0 END) as in_stock,
                 SUM(CASE WHEN status = 'On-Loan' THEN 1 ELSE 0 END) as on_loan
             FROM equipment
-            WHERE status != 'Lost' 
+            WHERE status != 'Lost'
             GROUP BY item_name
             ORDER BY item_name
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     # ============ BORROWER METHODS ============
-    
+
     def add_borrower(self, full_name: str, id_number: str, primary_phone: str,
                     secondary_phone: str = None, address: str = None) -> int:
         """Add new borrower"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT INTO borrower (full_name, id_number, primary_phone, 
+            INSERT INTO borrower (full_name, id_number, primary_phone,
                                 secondary_phone, address, created_date)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (full_name, id_number, primary_phone, secondary_phone, address,
               datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         self.conn.commit()
         return cursor.lastrowid
-    
-    def get_borrower(self, borrower_id: int) -> Optional[Dict]:
+
+    def get_borrower(self, borrower_id: int) -> dict | None:
         """Get borrower by ID"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM borrower WHERE id = ?', (borrower_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
-    
-    def search_borrower(self, search_term: str) -> List[Dict]:
+
+    def search_borrower(self, search_term: str) -> list[dict]:
         """Search borrower by name, ID number, or phone"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT * FROM borrower 
+            SELECT * FROM borrower
             WHERE full_name LIKE ? OR id_number LIKE ? OR primary_phone LIKE ?
             ORDER BY full_name
         ''', (f'%{search_term}%', f'%{search_term}%', f'%{search_term}%'))
         return [dict(row) for row in cursor.fetchall()]
-    
-    def get_borrower_by_id_number(self, id_number: str) -> Optional[Dict]:
+
+    def get_borrower_by_id_number(self, id_number: str) -> dict | None:
         """Get borrower by ID number"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM borrower WHERE id_number = ?', (id_number,))
         row = cursor.fetchone()
         return dict(row) if row else None
-    
+
     def update_borrower(self, borrower_id: int, full_name: str, id_number: str,
-                       primary_phone: str, secondary_phone: str = None, 
+                       primary_phone: str, secondary_phone: str = None,
                        address: str = None):
         """Update borrower details"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            UPDATE borrower 
-            SET full_name = ?, id_number = ?, primary_phone = ?, 
+            UPDATE borrower
+            SET full_name = ?, id_number = ?, primary_phone = ?,
                 secondary_phone = ?, address = ?
             WHERE id = ?
         ''', (full_name, id_number, primary_phone, secondary_phone, address, borrower_id))
         self.conn.commit()
-    
-    def get_all_borrowers(self) -> List[Dict]:
+
+    def get_all_borrowers(self) -> list[dict]:
         """Get all borrowers"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM borrower ORDER BY full_name')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     # ============ LOAN METHODS ============
-    
+
     def create_loan(self, borrower_id: int, equipment_id: int, deposit_paid: float,
                    donation_amount: float = 0, expected_return_date: str = None,
                    notes: str = None) -> int:
         """Create new loan transaction"""
         cursor = self.conn.cursor()
         loan_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         cursor.execute('''
             INSERT INTO loan (borrower_id, equipment_id, loan_date, deposit_paid,
                             donation_amount, expected_return_date, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (borrower_id, equipment_id, loan_date, deposit_paid, 
+        ''', (borrower_id, equipment_id, loan_date, deposit_paid,
               donation_amount, expected_return_date, notes))
-        
+
         loan_id = cursor.lastrowid
-        
+
         # Update equipment status to On-Loan
         self.update_equipment_status(equipment_id, 'On-Loan')
-        
+
         self.conn.commit()
         return loan_id
-    
-    def get_loan(self, loan_id: int) -> Optional[Dict]:
+
+    def get_loan(self, loan_id: int) -> dict | None:
         """Get loan by ID with joined borrower and equipment data"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT 
+            SELECT
                 l.*,
                 b.full_name as borrower_name,
                 b.id_number as borrower_id_number,
@@ -278,12 +293,12 @@ class Database:
         ''', (loan_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
-    
-    def get_active_loans(self) -> List[Dict]:
+
+    def get_active_loans(self) -> list[dict]:
         """Get all active loans with joined data"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT 
+            SELECT
                 l.*,
                 b.full_name as borrower_name,
                 b.id_number as borrower_id_number,
@@ -297,12 +312,12 @@ class Database:
             ORDER BY l.loan_date DESC
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
-    def search_active_loans(self, search_term: str) -> List[Dict]:
+
+    def search_active_loans(self, search_term: str) -> list[dict]:
         """Search active loans by borrower name, ID, or equipment"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT 
+            SELECT
                 l.*,
                 b.full_name as borrower_name,
                 b.id_number as borrower_id_number,
@@ -312,67 +327,67 @@ class Database:
             FROM loan l
             JOIN borrower b ON l.borrower_id = b.id
             JOIN equipment e ON l.equipment_id = e.id
-            WHERE l.loan_status = 'Active' 
-                AND (b.full_name LIKE ? OR b.id_number LIKE ? 
+            WHERE l.loan_status = 'Active'
+                AND (b.full_name LIKE ? OR b.id_number LIKE ?
                      OR e.item_name LIKE ? OR e.serial_number LIKE ?)
             ORDER BY l.loan_date DESC
-        ''', (f'%{search_term}%', f'%{search_term}%', 
+        ''', (f'%{search_term}%', f'%{search_term}%',
               f'%{search_term}%', f'%{search_term}%'))
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def process_return(self, loan_id: int) -> bool:
         """Process equipment return"""
         cursor = self.conn.cursor()
         return_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # Get loan details
         loan = self.get_loan(loan_id)
         if not loan or loan['loan_status'] != 'Active':
             return False
-        
+
         # Update loan
         cursor.execute('''
-            UPDATE loan 
-            SET actual_return_date = ?, 
+            UPDATE loan
+            SET actual_return_date = ?,
                 loan_status = 'Returned',
                 deposit_status = 'Returned'
             WHERE id = ?
         ''', (return_date, loan_id))
-        
+
         # Update equipment status back to In-Stock
         self.update_equipment_status(loan['equipment_id'], 'In-Stock')
-        
+
         self.conn.commit()
         return True
-    
+
     def forfeit_deposit(self, loan_id: int) -> bool:
         """Mark loan as not returned and forfeit deposit"""
         cursor = self.conn.cursor()
-        
+
         # Get loan details
         loan = self.get_loan(loan_id)
         if not loan or loan['loan_status'] != 'Active':
             return False
-        
+
         # Update loan
         cursor.execute('''
-            UPDATE loan 
+            UPDATE loan
             SET loan_status = 'Not Returned',
                 deposit_status = 'Forfeited'
             WHERE id = ?
         ''', (loan_id,))
-        
+
         # Update equipment status to Lost/Retired
         self.update_equipment_status(loan['equipment_id'], 'Lost')
-        
+
         self.conn.commit()
         return True
-    
-    def get_borrower_loan_history(self, borrower_id: int) -> List[Dict]:
+
+    def get_borrower_loan_history(self, borrower_id: int) -> list[dict]:
         """Get loan history for a borrower"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT 
+            SELECT
                 l.*,
                 e.item_name as equipment_name,
                 e.serial_number as equipment_serial
@@ -382,12 +397,12 @@ class Database:
             ORDER BY l.loan_date DESC
         ''', (borrower_id,))
         return [dict(row) for row in cursor.fetchall()]
-    
-    def get_all_loans(self) -> List[Dict]:
+
+    def get_all_loans(self) -> list[dict]:
         """Get all loans with joined data"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT 
+            SELECT
                 l.*,
                 b.full_name as borrower_name,
                 b.id_number as borrower_id_number,
@@ -400,17 +415,18 @@ class Database:
             ORDER BY l.loan_date DESC
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def close(self):
         """Close database connection"""
         if self.conn:
             self.conn.close()
+            self.conn = None
 
-    def get_lost_equipment(self) -> List[Dict]:
+    def get_lost_equipment(self) -> list[dict]:
         """Get list of all equipment marked as Lost"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT * FROM equipment 
+            SELECT * FROM equipment
             WHERE status = 'Lost'
             ORDER BY item_name
         ''')
@@ -430,7 +446,7 @@ class Database:
 
     # ============ BULK IMPORT/EXPORT HELPERS ============
 
-    def get_dataframe_data(self, table_name: str) -> List[Dict]:
+    def get_dataframe_data(self, table_name: str) -> list[dict]:
         """Fetch all data from a table for export"""
         cursor = self.conn.cursor()
         cursor.execute(f'SELECT * FROM {table_name}')
@@ -446,7 +462,7 @@ class Database:
         if row:
             # Update existing
             cursor.execute('''
-                UPDATE borrower 
+                UPDATE borrower
                 SET full_name=?, primary_phone=?, secondary_phone=?, address=?
                 WHERE id_number=?
             ''', (data['full_name'], data['primary_phone'],
@@ -470,7 +486,7 @@ class Database:
         if row:
             # Update existing (Name, Desc, Deposit, Status)
             cursor.execute('''
-                UPDATE equipment 
+                UPDATE equipment
                 SET item_name=?, description=?, deposit_amount=?, status=?
                 WHERE serial_number=?
             ''', (data['item_name'], data.get('description'),
