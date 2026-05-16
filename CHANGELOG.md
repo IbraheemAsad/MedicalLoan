@@ -3,6 +3,62 @@
 All notable changes to this project will be documented here. Versions
 follow the phases in `.kiro/steering/improvement-plan.md`.
 
+## [Unreleased] — Phase 4: Reports refactor
+
+### Added
+- `medicalloan/reports/` subpackage replacing the 670-line monolithic
+  `reports.py`:
+  - `strings.py` — per-language UI strings (`REPORT_STRINGS`).
+  - `fonts.py` — single `register_fonts()` (idempotent) plus
+    `LANG_FONT` map and `font_for_lang(lang)` helper. Replaces the
+    four `if is_rtl` branches that used to live in
+    `_get_font_for_lang`.
+  - `rtl.py` — `bidi_shape()` / `maybe_bidi()` helpers that reshape
+    Arabic and reorder RTL text. Degrades gracefully when
+    `python-bidi` or `arabic-reshaper` are missing.
+  - `builder.py` — `PdfBuilder` flowable factory (`title`, `subtitle`,
+    `heading`, `body`, `kv`, `hr`, `signature_line`) and
+    `make_data_table` for the inventory / loans tables. Hides the
+    `if is_rtl` branches at every callsite.
+  - `agreement.py`, `inventory.py`, `loans.py` — one focused renderer
+    each (used to be three sections of one file).
+  - `generator.py` — `ReportGenerator` orchestrator. Same public API
+    as the legacy class: `__init__(output_dir, config)`,
+    `generate_loan_agreement`, `generate_inventory_report`,
+    `generate_loans_report`, `open_pdf`.
+- `FontsMissingError`: raised at app startup if the bundled
+  `DavidLibre-Regular.ttf` / `NotoSansArabic-Regular.ttf` can't be
+  located (B14 / plan §6 — fail loudly instead of silently falling
+  back to Helvetica which renders Hebrew/Arabic as boxes).
+- `tests/test_reports_smoke.py` — renders all three PDF types in all
+  three languages into `tmp_path`, asserts non-empty `%PDF`-prefixed
+  output. Gated on `importorskip("reportlab")` so lint-only CI
+  matrix entries still pass.
+
+### Changed
+- `reports.py` at the repo root is now a thin re-export shim
+  (`from medicalloan.reports import ReportGenerator, REPORT_STRINGS`)
+  so `from reports import ReportGenerator` in `medicalloan/app.py`,
+  the PyInstaller spec, and any external scripts keep working
+  unchanged.
+- The loan-agreement PDF is now rendered as a stack of `Paragraph`
+  flowables instead of raw `canvas.drawString` / `drawRightString`
+  calls (plan §6). Long Hebrew equipment names and Arabic addresses
+  now wrap onto multiple lines instead of running off the page.
+- CI `syntax` job now byte-compiles the entire `medicalloan/`
+  package and `services/` in addition to the three legacy top-level
+  modules, so a typo in any package module fails CI immediately
+  rather than at runtime.
+
+### Notes for operators
+- Public API of `ReportGenerator` is unchanged. No callsites in
+  `medicalloan/app.py`, `medicalloan/ui/views/reports.py`, or
+  `medicalloan/ui/views/new_loan.py` needed updating.
+- If the `fonts/` directory is ever stripped from a deployment, the
+  app will now fail loudly at startup with a clear
+  `FontsMissingError` instead of generating PDFs with empty boxes
+  where Hebrew/Arabic should be.
+
 ## [Unreleased] — Phase 2: Database hardening
 
 ### Added
