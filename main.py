@@ -128,7 +128,7 @@ I18N_STRINGS = {
         'confirm_print': "Confirm & Print Agreement",
         'err_fill_required': "Please fill in all required fields (*)",
         'err_invalid_deposit_donation': "Invalid deposit or donation amount",
-        'err_id_length': "ID Number must be exactly 9 digits (or '-' to skip).",
+        'err_id_format': "ID Number must be exactly 9 digits (or '-' to skip).",
         'err_create_loan_fail': "Failed to create loan: {e}",
         'success_loan_created': "Loan created successfully!\nLoan ID: {id}\n\nThe loan agreement has been opened for printing.",
         'warn_agreement_fail': "Loan created but failed to generate agreement: {e}",
@@ -270,7 +270,7 @@ I18N_STRINGS = {
         'confirm_print': "אישור והדפסת הסכם",
         'err_fill_required': "(*) אנא מלא את כל שדות החובה",
         'err_invalid_deposit_donation': "סכום פיקדון או תרומה שגוי",
-        'err_id_length': "מספר תעודת זהות חייב להכיל בדיוק 9 ספרות (או '-' לדילוג).",
+        'err_id_format': "מספר ת״ז חייב להיות בדיוק 9 ספרות (או '-' לדילוג).",
         'err_create_loan_fail': "נכשל ביצירת השאלה: {e}",
         'success_loan_created': "השאלה נוצרה בהצלחה!\nמספר השאלה: {id}\n\nהסכם ההשאלה נפתח להדפסה.",
         'warn_agreement_fail': "ההשאלה נוצרה אך יצירת ההסכם נכשלה: {e}",
@@ -412,7 +412,7 @@ I18N_STRINGS = {
         'confirm_print': "تأكيد وطباعة الاتفاقية",
         'err_fill_required': "(*) يرجى ملء جميع الحقول المطلوبة",
         'err_invalid_deposit_donation': "مبلغ التأمين أو التبرع غير صالح",
-        'err_id_length': "يجب أن يتكون رقم الهوية من 9 أرقام بالضبط (أو '-' للتخطي).",
+        'err_id_format': "يجب أن يكون رقم الهوية مكوّناً من 9 أرقام بالضبط (أو '-' للتخطي).",
         'err_create_loan_fail': "فشل في إنشاء الإعارة: {e}",
         'success_loan_created': "تم إنشاء الإعارة بنجاح!\nرقم الإعارة: {id}\n\nتم فتح اتفاقية الإعارة للطباعة.",
         'warn_agreement_fail': "تم إنشاء الإعارة ولكن فشل إنشاء الاتفاقية: {e}",
@@ -541,26 +541,30 @@ class MedicalEquipmentApp:
         self.vcmd_numbers = (self.root.register(self.validate_numbers_only), '%P')
         self.vcmd_id = (self.root.register(self.validate_id_input), '%P')
 
+        # B15: cleanly close the DB (with a WAL checkpoint) when the user
+        # closes the window. Without this the connection is only released
+        # when the interpreter exits and `-wal`/`-shm` files can linger.
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        try:
+            self.db.close()
+        except Exception:
+            logging.exception("Error closing database on shutdown")
+        self.root.destroy()
+
     def perform_backup(self):
-        """Create a backup of the database on startup"""
-        db_path = self.db.db_path
-        if not os.path.exists(db_path):
-            return
+        """Create a backup of the database (delegates to backup_service).
 
-        # Create backups folder if it doesn't exist
-        backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-
-        # Create new backup with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_name = f"backup_{timestamp}.db"
-        shutil.copy2(db_path, os.path.join(backup_dir, backup_name))
-
-        # Cleanup: Keep only the last 5 backups
-        backups = sorted(glob.glob(os.path.join(backup_dir, "*.db")))
-        while len(backups) > 5:
-            os.remove(backups.pop(0))
+        Phase 2 (B8): the service skips when the latest backup is recent
+        and prunes with a tiered retention policy. See
+        services/backup_service.py.
+        """
+        from services.backup_service import perform_backup as _do_backup
+        try:
+            _do_backup(self.db.db_path)
+        except Exception:
+            logging.exception("Database backup failed")
 
     def load_icons(self):
         """Load and process icons based on the current theme"""
@@ -641,14 +645,13 @@ class MedicalEquipmentApp:
         """
         1. Makes the window Modal (blocks main app).
         2. Auto-sizes the window to fit content perfectly.
-        3. Centers the window on the parent window's monitor.
+        3. Centers the window on the screen.
         """
         # 1. Make Modal (Block main window)
         dialog.transient(self.root)
         dialog.grab_set()
 
-        # 2. Update both windows to ensure geometry is settled
-        self.root.update_idletasks()
+        # 2. Update the window to calculate required size
         dialog.update_idletasks()
 
         # Get the calculated size based on widgets
@@ -659,22 +662,15 @@ class MedicalEquipmentApp:
         if width < min_width:
             width = min_width
 
-        # 3. Calculate Center Position relative to the root window
-        # (so dialogs appear on the same monitor as the main app)
-        parent_x = self.root.winfo_rootx()
-        parent_y = self.root.winfo_rooty()
-        parent_w = self.root.winfo_width()
-        parent_h = self.root.winfo_height()
+        # 3. Calculate Center Position relative to the main window so the
+        # dialog appears on the same monitor in multi-monitor setups (B11).
+        root_x = self.root.winfo_x()
+        root_y = self.root.winfo_y()
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
 
-        # Fall back to screen if root has no real geometry yet
-        if parent_w <= 1 or parent_h <= 1:
-            parent_x = 0
-            parent_y = 0
-            parent_w = self.root.winfo_screenwidth()
-            parent_h = self.root.winfo_screenheight()
-
-        x = parent_x + (parent_w // 2) - (width // 2)
-        y = parent_y + (parent_h // 2) - (height // 2)
+        x = root_x + (root_w // 2) - (width // 2)
+        y = root_y + (root_h // 2) - (height // 2)
 
         # Apply geometry (Size + Position)
         dialog.geometry(f'{width}x{height}+{x}+{y}')
@@ -682,16 +678,16 @@ class MedicalEquipmentApp:
     def auto_size_treeview_columns(self, tree):
         """Auto-sizes all columns in a Treeview to fit their content AND sets text alignment."""
 
-        # Use a standard font for measuring; pull from the ttk.Style instead of
-        # tree.cget("font") which often returns the style name, not a font.
-        font = None
+        # B12: tree.cget("font") usually returns the *style name*, not a font
+        # spec, which made the bare-except fallback run every call. Read the
+        # font from ttk.Style() instead, which returns the real configured font.
         try:
-            style_font = ttk.Style().lookup('Treeview', 'font')
-            if style_font:
-                font = tkfont.nametofont(style_font) if isinstance(style_font, str) else tkfont.Font(font=style_font)
-        except (tk.TclError, RuntimeError):
-            font = None
-        if font is None:
+            style = ttk.Style()
+            font_spec = style.lookup('Treeview', 'font')
+            if not font_spec:
+                raise KeyError('Treeview font not in style')
+            font = tkfont.Font(font=font_spec)
+        except (KeyError, tk.TclError):
             font = tkfont.Font(family="Helvetica", size=self.base_font_size)
 
         # Get all column identifiers
@@ -980,6 +976,21 @@ class MedicalEquipmentApp:
 
         # Find the translation, default to the original key if not found
         return status_map.get(status_key, status_key)
+
+    def _equipment_display_status(self, eq: dict) -> str:
+        """Display status for an equipment row.
+
+        Phase 2 introduced `is_retired` as a separate flag (see B4 in
+        .kiro/steering/improvement-plan.md), so the canonical
+        `equipment.status` column only ever holds 'In-Stock' or 'On-Loan'.
+        Most of the UI still wants to surface "Lost" for retired items —
+        we synthesize it here so the inventory tree, search, and styling
+        keep working without each call site needing to know about the
+        flag.
+        """
+        if eq.get('is_retired'):
+            return 'Lost'
+        return eq.get('status') or ''
 
     def _get_status_tag(self, status_key: str) -> str:
         """Maps a database status key to its corresponding tag name."""
@@ -1288,7 +1299,7 @@ class MedicalEquipmentApp:
 
         # Load equipment
         for i, eq in enumerate(equipment_list, 1):
-            status = eq['status']
+            status = self._equipment_display_status(eq)
             tree.insert('', 'end', values=(
                 eq['id'],  # Index 0 (Hidden, used for logic)
                 i,  # Index 1 (Visible #)
@@ -1314,13 +1325,13 @@ class MedicalEquipmentApp:
         # Search equipment
         equipment_list = self.db.search_equipment(search_term)
         for i, eq in enumerate(equipment_list, 1):  # Added enumerate
-            status = eq['status']
+            status = self._equipment_display_status(eq)
             tree.insert('', 'end', values=(
                 eq['id'],
                 i,
                 eq['item_name'],
                 eq['serial_number'],
-                self._get_translated_status(eq['status']),
+                self._get_translated_status(status),
                 f"{eq['deposit_amount']:.2f}",
                 eq['description'] or ''
             ), tags=(self._get_status_tag(status),))
@@ -2005,7 +2016,7 @@ class MedicalEquipmentApp:
                     return
 
                 if id_number != '-' and len(id_number) != 9:
-                    messagebox.showerror("Error", self.i18n[self.lang]['err_id_length'])
+                    messagebox.showerror("Error", self.i18n[self.lang]['err_id_format'])
                     return
 
                 if borrower_data['borrower_id']:
@@ -2699,7 +2710,7 @@ class MedicalEquipmentApp:
                 return
 
             if id_num != '-' and len(id_num) != 9:
-                messagebox.showerror("Error", self.i18n[self.lang]['err_id_length'])
+                messagebox.showerror("Error", self.i18n[self.lang]['err_id_format'])
                 return
 
             try:
@@ -2853,29 +2864,31 @@ class MedicalEquipmentApp:
             # 1. Read Excel File
             xls = pd.ExcelFile(filename)
 
-            # 2. Import Borrowers
-            if 'Borrowers' in xls.sheet_names:
-                df_borrower = pd.read_excel(xls, 'Borrowers')
-                # Replace NaN with None (for SQL nulls)
-                df_borrower = df_borrower.where(pd.notnull(df_borrower), None)
-                for _, row in df_borrower.iterrows():
-                    self.db.upsert_borrower_from_dict(row.to_dict())
+            # B16: wrap the entire multi-sheet import in one transaction.
+            # If any row trips a CHECK or FK constraint we discard the lot
+            # rather than leaving the DB half-imported.
+            with self.db.import_from_excel_transaction():
+                # 2. Import Borrowers
+                if 'Borrowers' in xls.sheet_names:
+                    df_borrower = pd.read_excel(xls, 'Borrowers')
+                    df_borrower = df_borrower.where(pd.notnull(df_borrower), None)
+                    for _, row in df_borrower.iterrows():
+                        self.db.upsert_borrower_from_dict(row.to_dict())
 
-            # 3. Import Equipment
-            if 'Equipment' in xls.sheet_names:
-                df_equip = pd.read_excel(xls, 'Equipment')
-                df_equip = df_equip.where(pd.notnull(df_equip), None)
-                for _, row in df_equip.iterrows():
-                    self.db.upsert_equipment_from_dict(row.to_dict())
+                # 3. Import Equipment
+                if 'Equipment' in xls.sheet_names:
+                    df_equip = pd.read_excel(xls, 'Equipment')
+                    df_equip = df_equip.where(pd.notnull(df_equip), None)
+                    for _, row in df_equip.iterrows():
+                        self.db.upsert_equipment_from_dict(row.to_dict())
 
-            # 4. Import Loans (Optional/Advanced)
-            # Only import loans if explicitly requested (restoring backup)
-            # because IDs must match exactly.
-            if 'Loans' in xls.sheet_names:
-                df_loan = pd.read_excel(xls, 'Loans')
-                df_loan = df_loan.where(pd.notnull(df_loan), None)
-                for _, row in df_loan.iterrows():
-                    self.db.import_loan_record(row.to_dict())
+                # 4. Import Loans (only when restoring a backup; IDs must
+                #    line up with the equipment/borrower rows above).
+                if 'Loans' in xls.sheet_names:
+                    df_loan = pd.read_excel(xls, 'Loans')
+                    df_loan = df_loan.where(pd.notnull(df_loan), None)
+                    for _, row in df_loan.iterrows():
+                        self.db.import_loan_record(row.to_dict())
 
             messagebox.showinfo("Success", "Import completed successfully!")
 
@@ -2910,22 +2923,12 @@ class MedicalEquipmentApp:
             self.config.read(config_path, encoding='utf-8')
 
 
-def _resolve_data_dir():
-    """Return the directory where the DB / logs / backups live.
-
-    Mirrors the logic used by Database() so the log file is co-located with
-    the database, regardless of CWD or PyInstaller bundling.
-    """
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-
 def main():
     # --- LOGGING SETUP ---
-    # Log file lives next to the database (not the CWD), so behavior is
-    # consistent whether launched from a shortcut, terminal, or PyInstaller exe.
-    log_path = os.path.join(_resolve_data_dir(), 'app_errors.log')
+    # B9: write the log next to the database (and therefore next to the
+    # .exe when packaged) so the user can find it where they expect.
+    from paths import default_db_path, log_file_path
+    log_path = log_file_path(default_db_path())
     logging.basicConfig(
         filename=log_path,
         level=logging.ERROR,
@@ -2939,26 +2942,13 @@ def main():
             return
         logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
         # Optional: Show a popup to the user saying "Check the logs"
-        messagebox.showerror(
-            "Critical Error",
-            f"An error occurred. See app_errors.log.\n\n{exc_value}"
-        )
+        messagebox.showerror("Critical Error",
+                             f"An error occurred. See {log_path}.\n\n{exc_value}")
 
     sys.excepthook = handle_exception
 
     root = tk.Tk()
     app = MedicalEquipmentApp(root)
-
-    # Ensure the database connection is closed cleanly when the user closes
-    # the window (X button or Alt-F4).
-    def _on_close():
-        try:
-            app.db.close()
-        except Exception:
-            logging.exception("Error closing database on shutdown")
-        root.destroy()
-
-    root.protocol("WM_DELETE_WINDOW", _on_close)
     root.mainloop()
 
 

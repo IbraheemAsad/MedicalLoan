@@ -1,4 +1,5 @@
 # MedicalLoan — Improvement Plan
+# MedicalLoan — Improvement Plan
 
 This is the canonical reference for the ongoing refactor and bug-fix effort.
 Treat the bug IDs (B1–B18) and phase numbers as stable identifiers — reference
@@ -7,7 +8,7 @@ them in commits, PRs, and issues (e.g. `fix(B2): parameterize import_loan_record
 ## Status
 
 - **Phase 1 — Quick wins**: ✅ Done
-- **Phase 2 — Database hardening**: ⏳ Not started
+- **Phase 2 — Database hardening**: ✅ Done
 - **Phase 3 — Decompose `main.py` into views**: ⏳ Not started
 - **Phase 4 — Reports refactor**: ⏳ Not started
 - **Phase 5 — Polish**: ⏳ Not started
