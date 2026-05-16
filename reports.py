@@ -3,18 +3,19 @@ Reports module for Medical Equipment Loan Management System
 Handles PDF generation for loan agreements and reports
 """
 
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from datetime import datetime
 import os
 import sys
+from datetime import datetime
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # --- RTL Support ---
 # This module requires the python-bidi library for RTL text processing
@@ -216,13 +217,15 @@ class ReportGenerator:
 
             pdfmetrics.registerFont(TTFont(self.rtl_font_name, 'DavidLibre-Regular.ttf')) # Default to Hebrew font
             print("Loaded 'DavidLibre-Regular.ttf' and 'NotoSansArabic-Regular.ttf'")
-        except:
+        except Exception as e:
+            print(f"Could not load bundled RTL fonts: {e}")
             try:
                 # Fallback for Windows
                 pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
                 self.rtl_font_name = 'Arial'
                 print("Using system 'Arial' font.")
-            except:
+            except Exception as e2:
+                print(f"Could not load 'arial.ttf' either: {e2}")
                 print("WARNING: Could not load RTL fonts ('DavidLibre-Regular.ttf', 'NotoSansArabic-Regular.ttf', or 'arial.ttf').")
                 print("Please download 'DavidLibre-Regular.ttf' and 'NotoSansArabic-Regular.ttf' from Google Fonts")
                 print("and place them in the application directory for proper RTL support.")
@@ -259,13 +262,13 @@ class ReportGenerator:
             try:
                 pdfmetrics.getFont('NotoSansArabic-Regular')
                 return 'NotoSansArabic-Regular'
-            except:
+            except KeyError:
                 pass
         elif lang == 'he':
             try:
                 pdfmetrics.getFont('DavidLibre-Regular')
                 return 'DavidLibre-Regular'
-            except:
+            except KeyError:
                 pass
 
         return self.rtl_font_name
@@ -467,7 +470,7 @@ class ReportGenerator:
         data = [headers]
 
         # Totals for calculation
-        t_items = t_stock = t_loan = t_not_returned = 0
+        t_items = t_stock = t_loan = 0
 
         for item in equipment_summary:
             row = [
@@ -522,7 +525,7 @@ class ReportGenerator:
                 # Try to parse date, handle errors if format varies
                 try:
                     created_date = item['created_date'].split(' ')[0]  # Just the YYYY-MM-DD part
-                except:
+                except (AttributeError, IndexError, TypeError):
                     created_date = item['created_date']
 
                 row = [

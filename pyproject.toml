@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medicalloan"
+version = "0.2.0"
+description = "Medical Equipment Loan Management System"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Ibraheem Asad" }]
+keywords = ["medical", "loan", "tkinter", "inventory"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Healthcare Industry",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# Pinned runtime deps. Bump intentionally with PRs.
+dependencies = [
+    "reportlab==4.2.2",
+    "Pillow==10.4.0",
+    "pandas==2.2.2",
+    "openpyxl==3.1.5",
+    "python-bidi==0.6.0",
+    "arabic-reshaper==3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.6.9",
+    "black==24.10.0",
+    "pre-commit==3.8.0",
+    "pytest==8.3.3",
+]
+
+[project.scripts]
+medicalloan = "main:main"
+
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+# Don't reformat the giant translation dicts in main.py just yet — Phase 3
+# will move them to dedicated i18n modules. Keep diff small for now.
+extend-exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+  | backups
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["build", "dist", "backups", ".venv"]
+
+[tool.ruff.lint]
+# Start lenient. Phase 2/3 PRs can ratchet up.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear (catches B904, mutable defaults, etc.)
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501", # line too long — handled by black; current code has many long strings
+    "E402", # module level import not at top — main.py does sys.path tweak first
+    "E701", # multiple statements on one line — pervasive `if is_rtl: ...` pattern; addressed in Phase 3
+    "E741", # ambiguous variable names (e.g. `l` in iterators) — many existing
+    "B008", # function calls in defaults — Tkinter pattern
+    "B023", # function-uses-loop-variable — common in lambda callbacks
+]
+
+[tool.ruff.lint.per-file-ignores]
+# main.py is the soon-to-be-split monolith; keep noise down for now.
+"main.py" = ["F401", "F841"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["database", "reports"]
