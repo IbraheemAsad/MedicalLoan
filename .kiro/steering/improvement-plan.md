@@ -9,8 +9,8 @@ them in commits, PRs, and issues (e.g. `fix(B2): parameterize import_loan_record
 
 - **Phase 1 — Quick wins**: ✅ Done
 - **Phase 2 — Database hardening**: ✅ Done
-- **Phase 3 — Decompose `main.py` into views**: ⏳ Not started
-- **Phase 4 — Reports refactor**: ⏳ Not started
+- **Phase 3 — Decompose `main.py` into views**: ✅ Done
+- **Phase 4 — Reports refactor**: ✅ Done
 - **Phase 5 — Polish**: ✅ Done
 
 When working on this repo, prefer the phase order below. Cross-phase work is
