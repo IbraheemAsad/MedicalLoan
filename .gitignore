@@ -6,8 +6,8 @@ dist/
 # Runtime / generated files
 app_errors.log
 *.log
-reports/
-backups/
+/reports/
+/backups/
 
 # Python cache
 __pycache__/

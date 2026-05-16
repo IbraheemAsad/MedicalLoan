@@ -48,4 +48,4 @@ jobs:
           cache: pip
 
       - name: Byte-compile project
-        run: python -m compileall -q main.py database.py reports.py
+        run: python -m compileall -q main.py database.py reports.py medicalloan/ services/
