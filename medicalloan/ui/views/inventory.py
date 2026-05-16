@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from medicalloan.ui import dialogs as ui_dialogs
 from medicalloan.ui.dialogs import setup_dialog_window
 from medicalloan.ui.treeview import (
     auto_size_treeview_columns,
@@ -38,13 +39,11 @@ def show(app) -> None:
     ttk.Label(
         header,
         text=app.i18n[app.lang]['inventory_title'],
-        style=style_subtitle,
-    ).pack(side=side_left)
+        style=style_subtitle).pack(side=side_left)
     ttk.Button(
         header,
         text=app.i18n[app.lang]['back_to_dashboard'],
-        command=app.show_dashboard,
-    ).pack(side=side_right)
+        command=app.show_dashboard).pack(side=side_right)
 
     # --- Treeview ---------------------------------------------------------
     tree_frame = ttk.Frame(app.main_frame)
@@ -63,8 +62,7 @@ def show(app) -> None:
         show='headings',
         height=8,
         yscrollcommand=vsb.set,
-        xscrollcommand=hsb.set,
-    )
+        xscrollcommand=hsb.set)
     tree.column('Spacer', width=1, stretch=True)
     tree.heading('Spacer', text="")
 
@@ -93,9 +91,7 @@ def show(app) -> None:
         on_show_all=lambda: _load_inventory(app, tree),
         add_button=(
             app.i18n[app.lang]['add_new_equipment'],
-            lambda: _show_add_equipment(app),
-        ),
-    )
+            lambda: _show_add_equipment(app)))
 
     # --- Pack the treeview after the search frame so order matches legacy
     tree_frame.pack(pady=10, fill='both', expand=True, padx=20)
@@ -111,18 +107,20 @@ def show(app) -> None:
     ttk.Button(
         action_frame,
         text=app.i18n[app.lang]['edit_selected'],
-        command=lambda: _edit_equipment(app, tree),
-    ).pack(side='left', padx=5)
+        command=lambda: _edit_equipment(app, tree)).pack(side='left', padx=5)
     ttk.Button(
         action_frame,
         text=app.i18n[app.lang]['delete_selected'],
-        command=lambda: _delete_equipment_action(app, tree),
-    ).pack(side='left', padx=5)
+        command=lambda: _delete_equipment_action(app, tree)).pack(side='left', padx=5)
     ttk.Button(
         action_frame,
         text=app.i18n[app.lang]['view_summary'],
-        command=lambda: _show_inventory_summary(app),
-    ).pack(side='left', padx=5)
+        command=lambda: _show_inventory_summary(app)).pack(side='left', padx=5)
+
+    # Phase 5: double-click a row to edit it (saves a click vs.
+    # select-then-press-Edit). Clicking on a header doesn't fire
+    # ``<Double-1>`` so this is safe.
+    tree.bind("<Double-1>", lambda _e: _edit_equipment(app, tree))
 
     _load_inventory(app, tree)
 
@@ -149,10 +147,8 @@ def _populate_tree(app, tree, equipment_list) -> None:
                 eq['serial_number'],
                 translated_status(status, app.i18n, app.lang),
                 f"{eq['deposit_amount']:.2f}",
-                eq['description'] or '',
-            ),
-            tags=(status_tag_for(status),),
-        )
+                eq['description'] or ''),
+            tags=(status_tag_for(status),))
 
     auto_size_treeview_columns(tree, is_rtl=app.is_rtl, fallback_size=app.base_font_size)
 
@@ -185,8 +181,7 @@ def _show_add_equipment(app) -> None:
     ttk.Label(
         dialog,
         text=app.i18n[app.lang]['add_eq_title'],
-        font=('Helvetica', 14, 'bold'),
-    ).pack(pady=10)
+        font=('Helvetica', 14, 'bold')).pack(pady=10)
 
     form_frame = ttk.Frame(dialog)
     form_frame.pack(pady=20, padx=20, fill='both')
@@ -205,15 +200,13 @@ def _show_add_equipment(app) -> None:
         ttk.Label(
             form_frame,
             text=app.i18n[app.lang][label_key],
-            style=style_label,
-        ).grid(row=row, column=col_label, sticky=anchor_w, pady=5)
+            style=style_label).grid(row=row, column=col_label, sticky=anchor_w, pady=5)
         ttk.Entry(
             form_frame,
             textvariable=var,
             width=40,
             justify=justify_text,
-            font=app.input_font,
-        ).grid(row=row, column=col_entry, pady=5)
+            font=app.input_font).grid(row=row, column=col_entry, pady=5)
 
     button_frame = ttk.Frame(dialog)
     button_frame.pack(pady=20)
@@ -226,27 +219,22 @@ def _show_add_equipment(app) -> None:
             deposit = float(deposit_var.get())
 
             if not name or not serial:
-                messagebox.showerror("Error", app.i18n[app.lang]['err_required_fields'])
+                ui_dialogs.error(app, app.i18n[app.lang]['err_required_fields'])
                 return
 
             app.db.add_equipment(name, description, serial, deposit)
-            messagebox.showinfo("Success", app.i18n[app.lang]['success_add'])
+            ui_dialogs.info(app, app.i18n[app.lang]['success_add'])
             dialog.destroy()
             app.show_inventory()
         except ValueError:
-            messagebox.showerror("Error", app.i18n[app.lang]['err_invalid_deposit'])
+            ui_dialogs.error(app, app.i18n[app.lang]['err_invalid_deposit'])
         except Exception as e:
-            messagebox.showerror(
-                "Error",
-                app.i18n[app.lang]['err_add_fail'].format(e=str(e)),
-            )
+            ui_dialogs.error(app, app.i18n[app.lang]['err_add_fail'].format(e=str(e)))
 
     ttk.Button(
-        button_frame, text=app.i18n[app.lang]['save'], command=save_equipment,
-    ).pack(side='left', padx=5)
+        button_frame, text=app.i18n[app.lang]['save'], command=save_equipment).pack(side='left', padx=5)
     ttk.Button(
-        button_frame, text=app.i18n[app.lang]['cancel'], command=dialog.destroy,
-    ).pack(side='left', padx=5)
+        button_frame, text=app.i18n[app.lang]['cancel'], command=dialog.destroy).pack(side='left', padx=5)
 
     setup_dialog_window(dialog, app.root)
 
@@ -256,14 +244,14 @@ def _show_add_equipment(app) -> None:
 def _edit_equipment(app, tree) -> None:
     selection = tree.selection()
     if not selection:
-        messagebox.showwarning("Warning", app.i18n[app.lang]['warn_select_item'])
+        ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_item'])
         return
 
     item = tree.item(selection[0])
     eq_id = item['values'][0]
     equipment = app.db.get_equipment(eq_id)
     if not equipment:
-        messagebox.showerror("Error", app.i18n[app.lang]['err_not_found'])
+        ui_dialogs.error(app, app.i18n[app.lang]['err_not_found'])
         return
 
     dialog = tk.Toplevel(app.root)
@@ -280,8 +268,7 @@ def _edit_equipment(app, tree) -> None:
     ttk.Label(
         dialog,
         text=app.i18n[app.lang]['edit_eq_title'],
-        font=('Helvetica', 14, 'bold'),
-    ).pack(pady=10)
+        font=('Helvetica', 14, 'bold')).pack(pady=10)
 
     form_frame = ttk.Frame(dialog)
     form_frame.pack(pady=20, padx=20, fill='both')
@@ -300,15 +287,13 @@ def _edit_equipment(app, tree) -> None:
         ttk.Label(
             form_frame,
             text=app.i18n[app.lang][label_key],
-            style=style_label,
-        ).grid(row=row, column=col_label, sticky=anchor_w, pady=5)
+            style=style_label).grid(row=row, column=col_label, sticky=anchor_w, pady=5)
         ttk.Entry(
             form_frame,
             textvariable=var,
             width=40,
             justify=justify_text,
-            font=app.input_font,
-        ).grid(row=row, column=col_entry, pady=5)
+            font=app.input_font).grid(row=row, column=col_entry, pady=5)
 
     button_frame = ttk.Frame(dialog)
     button_frame.pack(pady=20)
@@ -321,27 +306,22 @@ def _edit_equipment(app, tree) -> None:
             deposit = float(deposit_var.get())
 
             if not name or not serial:
-                messagebox.showerror("Error", app.i18n[app.lang]['err_required_fields'])
+                ui_dialogs.error(app, app.i18n[app.lang]['err_required_fields'])
                 return
 
             app.db.update_equipment(eq_id, name, description, serial, deposit)
-            messagebox.showinfo("Success", app.i18n[app.lang]['success_update'])
+            ui_dialogs.info(app, app.i18n[app.lang]['success_update'])
             dialog.destroy()
             app.show_inventory()
         except ValueError:
-            messagebox.showerror("Error", app.i18n[app.lang]['err_invalid_deposit'])
+            ui_dialogs.error(app, app.i18n[app.lang]['err_invalid_deposit'])
         except Exception as e:
-            messagebox.showerror(
-                "Error",
-                app.i18n[app.lang]['err_update_fail'].format(e=str(e)),
-            )
+            ui_dialogs.error(app, app.i18n[app.lang]['err_update_fail'].format(e=str(e)))
 
     ttk.Button(
-        button_frame, text=app.i18n[app.lang]['update'], command=update_equipment,
-    ).pack(side='left', padx=5)
+        button_frame, text=app.i18n[app.lang]['update'], command=update_equipment).pack(side='left', padx=5)
     ttk.Button(
-        button_frame, text=app.i18n[app.lang]['cancel'], command=dialog.destroy,
-    ).pack(side='left', padx=5)
+        button_frame, text=app.i18n[app.lang]['cancel'], command=dialog.destroy).pack(side='left', padx=5)
 
     setup_dialog_window(dialog, app.root)
 
@@ -351,7 +331,7 @@ def _edit_equipment(app, tree) -> None:
 def _delete_equipment_action(app, tree) -> None:
     selection = tree.selection()
     if not selection:
-        messagebox.showwarning("Warning", app.i18n[app.lang]['warn_select_item'])
+        ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_item'])
         return
 
     item = tree.item(selection[0])
@@ -368,11 +348,10 @@ def _delete_equipment_action(app, tree) -> None:
         app.db.delete_equipment(eq_id)
         messagebox.showinfo(
             app.i18n[app.lang]['success_title'],
-            app.i18n[app.lang]['success_delete_msg'],
-        )
+            app.i18n[app.lang]['success_delete_msg'])
         _load_inventory(app, tree)
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to delete: {e}")
+        ui_dialogs.error(app, f"Failed to delete: {e}")
 
 
 # ---- Inventory summary popup ---------------------------------------------
@@ -387,8 +366,7 @@ def _show_inventory_summary(app) -> None:
     ttk.Label(
         dialog,
         text=app.i18n[app.lang]['summary_title'],
-        font=('Helvetica', 14, 'bold'),
-    ).pack(pady=10)
+        font=('Helvetica', 14, 'bold')).pack(pady=10)
 
     tree_frame = ttk.Frame(dialog)
     tree_frame.pack(pady=10, fill='both', expand=True, padx=20)
@@ -398,8 +376,7 @@ def _show_inventory_summary(app) -> None:
     visual_cols = ['Spacer'] + base_visuals[::-1] if app.is_rtl else base_visuals
 
     tree = ttk.Treeview(
-        tree_frame, columns=cols, displaycolumns=visual_cols, show='headings',
-    )
+        tree_frame, columns=cols, displaycolumns=visual_cols, show='headings')
     tree.column('Spacer', width=1, stretch=True)
     tree.heading('Spacer', text="")
 
@@ -421,13 +398,11 @@ def _show_inventory_summary(app) -> None:
             item['item_name'],
             item['total_count'],
             item['in_stock'],
-            item['on_loan'],
-        ))
+            item['on_loan']))
 
     auto_size_treeview_columns(tree, is_rtl=app.is_rtl, fallback_size=app.base_font_size)
 
     ttk.Button(
-        dialog, text=app.i18n[app.lang]['close'], command=dialog.destroy,
-    ).pack(pady=10)
+        dialog, text=app.i18n[app.lang]['close'], command=dialog.destroy).pack(pady=10)
 
     setup_dialog_window(dialog, app.root, min_width=600)

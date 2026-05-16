@@ -133,6 +133,11 @@ EXPECTED_APP_METHODS = {
     # Excel data IO
     "export_to_excel",
     "import_from_excel",
+    # Phase 5 additions
+    "show_status_bar",
+    "restore_from_backup",
+    "_save_preferences",
+    "_bind_global_shortcuts",
 }
 
 
@@ -161,7 +166,7 @@ VIEW_CONTRACTS = {
     "process_return": {"show"},
     "borrowers": {"show"},
     "reports": {"show", "generate_inventory_report", "generate_loans_report"},
-    "data_io": {"export_to_excel", "import_from_excel"},
+    "data_io": {"export_to_excel", "import_from_excel", "restore_from_backup"},
 }
 
 
@@ -181,7 +186,7 @@ def test_view_module_exposes_expected_callables(stubbed_runtime, view_name, expe
 # i18n -- new tables match the legacy I18N_STRINGS dict byte-for-byte
 # ---------------------------------------------------------------------------
 
-EXPECTED_LANG_KEY_COUNT = 133  # see context: legacy main.py had 133 keys per lang
+EXPECTED_LANG_KEY_COUNT = 152  # Phase 5 added ~19 keys for prefs/restore/status/shortcuts
 
 
 def test_i18n_three_languages_with_matching_keys(stubbed_runtime):

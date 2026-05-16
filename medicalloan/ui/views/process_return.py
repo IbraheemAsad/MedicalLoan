@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 from tkinter import messagebox, ttk
 
+from medicalloan.ui import dialogs as ui_dialogs
+
 from medicalloan.ui.treeview import auto_size_treeview_columns
 from medicalloan.ui.widgets import SearchFrame
 
@@ -33,13 +35,11 @@ def show(app) -> None:
     ttk.Label(
         header,
         text=app.i18n[app.lang]['return_title'],
-        style=style_subtitle,
-    ).pack(side=side_left)
+        style=style_subtitle).pack(side=side_left)
     ttk.Button(
         header,
         text=app.i18n[app.lang]['back_to_dashboard'],
-        command=app.show_dashboard,
-    ).pack(side=side_right)
+        command=app.show_dashboard).pack(side=side_right)
 
     # --- Treeview (built first so the SearchFrame closure can reference it)
     tree_frame = ttk.Frame(app.main_frame)
@@ -64,8 +64,7 @@ def show(app) -> None:
         show='headings',
         height=8,
         yscrollcommand=vsb.set,
-        xscrollcommand=hsb.set,
-    )
+        xscrollcommand=hsb.set)
     tree.column('Spacer', width=1, stretch=True)
     tree.heading('Spacer', text="")
 
@@ -91,8 +90,7 @@ def show(app) -> None:
         search_var=app.search_vars['return'],
         input_font=app.input_font,
         on_search=lambda term: _search_active_loans_list(app, term, tree),
-        on_show_all=lambda: _load_active_loans(app, tree),
-    )
+        on_show_all=lambda: _load_active_loans(app, tree))
 
     tree_frame.pack(pady=10, fill='both', expand=True, padx=20)
     tree.grid(row=0, column=col_tree, sticky='nsew')
@@ -109,13 +107,11 @@ def show(app) -> None:
         action_frame,
         text=app.i18n[app.lang]['btn_process_return_action'],
         command=lambda: _process_selected_return(app, tree),
-        style='Action.TButton',
-    ).pack(side=side_left, padx=5)
+        style='Action.TButton').pack(side=side_left, padx=5)
     ttk.Button(
         action_frame,
         text=app.i18n[app.lang]['btn_forfeit_deposit'],
-        command=lambda: _forfeit_selected_deposit(app, tree),
-    ).pack(side=side_left, padx=5)
+        command=lambda: _forfeit_selected_deposit(app, tree)).pack(side=side_left, padx=5)
 
     _load_active_loans(app, tree)
 
@@ -130,14 +126,12 @@ def _populate_tree(app, tree, loans) -> None:
 
     for i, loan in enumerate(loans, 1):
         loan_date = datetime.strptime(
-            loan['loan_date'], '%Y-%m-%d %H:%M:%S',
-        ).strftime('%d/%m/%Y')
+            loan['loan_date'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y')
         tree.insert('', 'end', values=(
             loan['id'], i,
             loan['equipment_name'], loan['equipment_serial'],
             loan['borrower_name'], loan['borrower_phone'],
-            loan_date, f"{loan['deposit_paid']:.0f}",
-        ))
+            loan_date, f"{loan['deposit_paid']:.0f}"))
 
     auto_size_treeview_columns(tree, is_rtl=app.is_rtl, fallback_size=app.base_font_size)
 
@@ -156,7 +150,7 @@ def _search_active_loans_list(app, search_term, tree) -> None:
 def _process_selected_return(app, tree) -> None:
     selection = tree.selection()
     if not selection:
-        messagebox.showwarning("Warning", app.i18n[app.lang]['warn_select_loan'])
+        ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_loan'])
         return
 
     item = tree.item(selection[0])
@@ -165,31 +159,24 @@ def _process_selected_return(app, tree) -> None:
 
     if not messagebox.askyesno(
         app.i18n[app.lang]['confirm_return_title'],
-        app.i18n[app.lang]['confirm_return_msg'].format(amount=deposit_amount),
-    ):
+        app.i18n[app.lang]['confirm_return_msg'].format(amount=deposit_amount)):
         return
 
     try:
         success = app.db.process_return(loan_id)
         if success:
-            messagebox.showinfo(
-                "Success",
-                app.i18n[app.lang]['success_return'].format(amount=deposit_amount),
-            )
+            ui_dialogs.info(app, app.i18n[app.lang]['success_return'].format(amount=deposit_amount))
             app.show_process_return()
         else:
-            messagebox.showerror("Error", app.i18n[app.lang]['err_return_fail'])
+            ui_dialogs.error(app, app.i18n[app.lang]['err_return_fail'])
     except Exception as e:
-        messagebox.showerror(
-            "Error",
-            app.i18n[app.lang]['err_generic'].format(e=str(e)),
-        )
+        ui_dialogs.error(app, app.i18n[app.lang]['err_generic'].format(e=str(e)))
 
 
 def _forfeit_selected_deposit(app, tree) -> None:
     selection = tree.selection()
     if not selection:
-        messagebox.showwarning("Warning", app.i18n[app.lang]['warn_select_loan'])
+        ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_loan'])
         return
 
     item = tree.item(selection[0])
@@ -198,22 +185,15 @@ def _forfeit_selected_deposit(app, tree) -> None:
 
     if not messagebox.askyesno(
         app.i18n[app.lang]['confirm_forfeit_title'],
-        app.i18n[app.lang]['confirm_forfeit_msg'].format(amount=deposit_amount),
-    ):
+        app.i18n[app.lang]['confirm_forfeit_msg'].format(amount=deposit_amount)):
         return
 
     try:
         success = app.db.forfeit_deposit(loan_id)
         if success:
-            messagebox.showinfo(
-                "Success",
-                app.i18n[app.lang]['success_forfeit'].format(amount=deposit_amount),
-            )
+            ui_dialogs.info(app, app.i18n[app.lang]['success_forfeit'].format(amount=deposit_amount))
             app.show_process_return()
         else:
-            messagebox.showerror("Error", app.i18n[app.lang]['err_forfeit_fail'])
+            ui_dialogs.error(app, app.i18n[app.lang]['err_forfeit_fail'])
     except Exception as e:
-        messagebox.showerror(
-            "Error",
-            app.i18n[app.lang]['err_generic'].format(e=str(e)),
-        )
+        ui_dialogs.error(app, app.i18n[app.lang]['err_generic'].format(e=str(e)))

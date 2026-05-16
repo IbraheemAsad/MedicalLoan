@@ -55,6 +55,51 @@ def _list_backups(backup_dir: str) -> list[tuple[datetime, str]]:
     return pairs
 
 
+def list_backups(backup_dir: str) -> list[tuple[datetime, str]]:
+    """Public newest-first listing of backups under ``backup_dir``.
+
+    Phase 5's restore-from-backup UI uses this to populate a chooser
+    dialog. Returning newest-first matches what an operator wants to
+    see (most recent backup at the top); the internal pruner still
+    works oldest-first, which is why we keep both directions.
+    """
+    pairs = _list_backups(backup_dir)
+    pairs.sort(key=lambda p: p[0], reverse=True)
+    return pairs
+
+
+def restore_backup(backup_path: str, db_path: str) -> str:
+    """Replace ``db_path`` with ``backup_path`` after taking a safety copy.
+
+    Returns the path to the safety copy of the *current* database that
+    we make before overwriting it -- so a user who restored the wrong
+    backup can recover. The safety copy lands next to the live DB
+    with a ``pre_restore_<timestamp>.db`` filename so it's never
+    confused with a regular tiered backup (which uses ``backup_*.db``).
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``backup_path`` doesn't exist.
+    """
+    if not os.path.exists(backup_path):
+        raise FileNotFoundError(backup_path)
+
+    db_dir = os.path.dirname(db_path) or '.'
+    os.makedirs(db_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    safety_name = f"pre_restore_{timestamp}.db"
+    safety_path = os.path.join(db_dir, safety_name)
+
+    if os.path.exists(db_path):
+        shutil.copy2(db_path, safety_path)
+        log.info("Saved pre-restore safety copy to %s", safety_path)
+
+    shutil.copy2(backup_path, db_path)
+    log.info("Restored database from %s", backup_path)
+    return safety_path
+
+
 def perform_backup(db_path: str, *, now: datetime | None = None) -> str | None:
     """Create a timestamped backup if enough time has passed; prune old ones.
 

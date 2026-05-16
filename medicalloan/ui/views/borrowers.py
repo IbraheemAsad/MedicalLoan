@@ -5,8 +5,9 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from datetime import datetime
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
+from medicalloan.ui import dialogs as ui_dialogs
 from medicalloan.ui.dialogs import setup_dialog_window
 from medicalloan.ui.treeview import (
     auto_size_treeview_columns,
@@ -117,6 +118,10 @@ def show(app) -> None:
         command=lambda: _view_borrower_history(app, tree),
     ).pack(side=side_left, padx=5)
 
+    # Phase 5: double-click a borrower row to view their loan history
+    # (mirrors the inventory view's double-click-to-edit ergonomics).
+    tree.bind("<Double-1>", lambda _e: _view_borrower_history(app, tree))
+
     _load_all_borrowers(app, tree)
 
 
@@ -155,7 +160,7 @@ def _search_borrowers_list(app, search_term, tree) -> None:
 def _view_borrower_history(app, tree) -> None:
     selection = tree.selection()
     if not selection:
-        messagebox.showwarning("Warning", app.i18n[app.lang]['warn_select_borrower'])
+        ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_borrower'])
         return
 
     item = tree.item(selection[0])
@@ -289,11 +294,11 @@ def _add_borrower_action(app, tree) -> None:
         phone = phone1_var.get().strip()
 
         if not name or not id_num or not phone:
-            messagebox.showerror("Error", app.i18n[app.lang]['err_fill_required'])
+            ui_dialogs.error(app, app.i18n[app.lang]['err_fill_required'])
             return
 
         if id_num != '-' and len(id_num) != 9:
-            messagebox.showerror("Error", app.i18n[app.lang]['err_id_format'])
+            ui_dialogs.error(app, app.i18n[app.lang]['err_id_format'])
             return
 
         try:
@@ -302,17 +307,13 @@ def _add_borrower_action(app, tree) -> None:
                 phone2_var.get().strip(),
                 address_var.get().strip(),
             )
-            messagebox.showinfo(
-                "Success", app.i18n[app.lang]['success_borrower_add'],
-            )
+            ui_dialogs.info(app, app.i18n[app.lang]['success_borrower_add'])
             dialog.destroy()
             _load_all_borrowers(app, tree)
         except sqlite3.IntegrityError:
-            messagebox.showerror(
-                "Error", app.i18n[app.lang]['err_borrower_exists'],
-            )
+            ui_dialogs.error(app, app.i18n[app.lang]['err_borrower_exists'])
         except Exception as e:
-            messagebox.showerror("Error", f"Failed: {e}")
+            ui_dialogs.error(app, f"Failed: {e}")
 
     btn_frame = ttk.Frame(dialog)
     btn_frame.pack(pady=20)

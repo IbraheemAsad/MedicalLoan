@@ -15,7 +15,9 @@ opens it directly.
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
+
+from medicalloan.ui import dialogs as ui_dialogs
 
 from medicalloan.ui.dialogs import setup_dialog_window
 from medicalloan.ui.treeview import auto_size_treeview_columns
@@ -44,13 +46,11 @@ def show(app) -> None:
     ttk.Label(
         header,
         text=app.i18n[app.lang]['new_loan_title'],
-        style=style_subtitle,
-    ).pack(side=side_left)
+        style=style_subtitle).pack(side=side_left)
     ttk.Button(
         header,
         text=app.i18n[app.lang]['back_to_dashboard'],
-        command=app.show_dashboard,
-    ).pack(side=side_right)
+        command=app.show_dashboard).pack(side=side_right)
 
     # --- Treeview ---------------------------------------------------------
     tree_frame = ttk.Frame(app.main_frame)
@@ -69,8 +69,7 @@ def show(app) -> None:
         show='headings',
         height=8,
         yscrollcommand=vsb.set,
-        xscrollcommand=hsb.set,
-    )
+        xscrollcommand=hsb.set)
     tree.column('Spacer', width=1, stretch=True)
     tree.heading('Spacer', text="")
     vsb.config(command=tree.yview)
@@ -93,8 +92,7 @@ def show(app) -> None:
         search_var=app.search_vars['loan_step1'],
         input_font=app.input_font,
         on_search=lambda term: _search_available_equipment(app, term, tree),
-        on_show_all=lambda: _load_available_equipment(app, tree),
-    )
+        on_show_all=lambda: _load_available_equipment(app, tree))
 
     tree_frame.pack(pady=10, fill='both', expand=True, padx=20)
     tree.grid(row=0, column=col_tree, sticky='nsew')
@@ -111,8 +109,7 @@ def show(app) -> None:
         action_frame,
         text=app.i18n[app.lang]['loan_this_item'],
         command=lambda: _proceed_to_borrower_step(app, tree),
-        style='Action.TButton',
-    ).pack()
+        style='Action.TButton').pack()
 
     _load_available_equipment(app, tree)
 
@@ -134,8 +131,7 @@ def _populate_equipment_tree(app, tree, equipment_list) -> None:
     for i, eq in enumerate(equipment_list, 1):
         tree.insert('', 'end', values=(
             eq['id'], i, eq['item_name'], eq['serial_number'],
-            f"{eq['deposit_amount']:.2f}", eq['description'] or '',
-        ))
+            f"{eq['deposit_amount']:.2f}", eq['description'] or ''))
     auto_size_treeview_columns(tree, is_rtl=app.is_rtl, fallback_size=app.base_font_size)
 
 
@@ -153,7 +149,7 @@ def _search_available_equipment(app, search_term, tree) -> None:
 def _proceed_to_borrower_step(app, tree) -> None:
     selection = tree.selection()
     if not selection:
-        messagebox.showwarning("Warning", app.i18n[app.lang]['warn_select_item'])
+        ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_item'])
         return
     item = tree.item(selection[0])
     eq_id = item['values'][0]
@@ -191,13 +187,11 @@ def show_borrower_step(app, equipment) -> None:
     ttk.Label(
         header,
         text=app.i18n[app.lang]['new_loan_title_step2'],
-        style='Subtitle.TLabel',
-    ).pack(side=title_side)
+        style='Subtitle.TLabel').pack(side=title_side)
     ttk.Button(
         header,
         text=app.i18n[app.lang]['back'],
-        command=app.show_new_loan,
-    ).pack(side=btn_side)
+        command=app.show_new_loan).pack(side=btn_side)
 
     # --- Two panes (borrower / item) --------------------------------------
     content_container = ttk.Frame(app.main_frame)
@@ -218,8 +212,7 @@ def show_borrower_step(app, equipment) -> None:
         pane_borrower,
         text=app.i18n[app.lang]['search_borrower'],
         padding=10,
-        labelanchor=label_anchor,
-    )
+        labelanchor=label_anchor)
     search_container.pack(fill='x', pady=(0, 10))
 
     search_var = app.search_vars['loan_step2']
@@ -228,41 +221,35 @@ def show_borrower_step(app, equipment) -> None:
         ttk.Button(
             search_container,
             text=app.i18n[app.lang]['search_btn'],
-            command=lambda: search_borrower_logic(),
-        ).grid(row=0, column=0, padx=5)
+            command=lambda: search_borrower_logic()).grid(row=0, column=0, padx=5)
         entry = ttk.Entry(
             search_container, textvariable=search_var, width=20,
-            justify=justify_text, font=app.input_font,
-        )
+            justify=justify_text, font=app.input_font)
         entry.grid(row=0, column=1, padx=5, sticky='ew')
         search_container.columnconfigure(1, weight=1)
     else:
         entry = ttk.Entry(
             search_container, textvariable=search_var, width=20,
-            font=app.input_font,
-        )
+            font=app.input_font)
         entry.grid(row=0, column=0, padx=5, sticky='ew')
         ttk.Button(
             search_container,
             text=app.i18n[app.lang]['search_btn'],
-            command=lambda: search_borrower_logic(),
-        ).grid(row=0, column=1, padx=5)
+            command=lambda: search_borrower_logic()).grid(row=0, column=1, padx=5)
         search_container.columnconfigure(0, weight=1)
 
     ttk.Label(
         search_container,
         text=app.i18n[app.lang]['search_by_id_phone'],
         font=('Helvetica', 9),
-        foreground='grey',
-    ).grid(row=1, column=0, columnspan=2, sticky=anchor_w, padx=5)
+        foreground='grey').grid(row=1, column=0, columnspan=2, sticky=anchor_w, padx=5)
 
     # Borrower details form
     form_container = ttk.LabelFrame(
         pane_borrower,
         text=app.i18n[app.lang]['borrower_details'],
         padding=10,
-        labelanchor=label_anchor,
-    )
+        labelanchor=label_anchor)
     form_container.pack(fill='x', expand=False)
 
     tools_frame = ttk.Frame(form_container)
@@ -281,14 +268,12 @@ def show_borrower_step(app, equipment) -> None:
         tools_frame,
         text=app.i18n[app.lang]['btn_edit_details'],
         command=lambda: set_fields_state('normal'),
-        width=15,
-    )
+        width=15)
     btn_change = ttk.Button(
         tools_frame,
         text=app.i18n[app.lang]['btn_change_borrower'],
         command=lambda: on_change_click(),
-        width=15,
-    )
+        width=15)
 
     def show_edit_buttons():
         # Re-pack from a clean slate so toggling state doesn't stack
@@ -333,12 +318,10 @@ def show_borrower_step(app, equipment) -> None:
 
     def add_row(parent, row, label_key, var, validator=None):
         ttk.Label(
-            parent, text=app.i18n[app.lang][label_key],
-        ).grid(row=row, column=f_col_lbl, sticky=anchor_w, pady=5)
+            parent, text=app.i18n[app.lang][label_key]).grid(row=row, column=f_col_lbl, sticky=anchor_w, pady=5)
         e = ttk.Entry(
             parent, textvariable=var, width=25,
-            justify=justify_text, font=app.input_font,
-        )
+            justify=justify_text, font=app.input_font)
         if validator:
             e.config(validate='key', validatecommand=validator)
         e.grid(row=row, column=f_col_ent, sticky='ew', pady=5)
@@ -357,38 +340,31 @@ def show_borrower_step(app, equipment) -> None:
         pane_item,
         text=app.i18n[app.lang]['selected_equipment'],
         padding=10,
-        labelanchor=label_anchor,
-    )
+        labelanchor=label_anchor)
     eq_container.pack(fill='x', pady=(0, 10))
 
     ttk.Label(
-        eq_container, text=equipment['item_name'], font=('Helvetica', 12, 'bold'),
-    ).pack(anchor=anchor_w)
+        eq_container, text=equipment['item_name'], font=('Helvetica', 12, 'bold')).pack(anchor=anchor_w)
     ttk.Label(
         eq_container,
-        text=f"{app.i18n[app.lang]['col_serial']}: {equipment['serial_number']}",
-    ).pack(anchor=anchor_w)
+        text=f"{app.i18n[app.lang]['col_serial']}: {equipment['serial_number']}").pack(anchor=anchor_w)
     ttk.Label(
         eq_container,
-        text=f"{app.i18n[app.lang]['col_deposit']}: {equipment['deposit_amount']:.2f}",
-    ).pack(anchor=anchor_w)
+        text=f"{app.i18n[app.lang]['col_deposit']}: {equipment['deposit_amount']:.2f}").pack(anchor=anchor_w)
 
     fin_container = ttk.LabelFrame(
         pane_item,
         text=app.i18n[app.lang]['financial_details'],
         padding=10,
-        labelanchor=label_anchor,
-    )
+        labelanchor=label_anchor)
     fin_container.pack(fill='x')
 
     def add_fin_row(row, label_key, var):
         ttk.Label(
-            fin_container, text=app.i18n[app.lang][label_key],
-        ).grid(row=row, column=f_col_lbl, sticky=anchor_w, pady=5)
+            fin_container, text=app.i18n[app.lang][label_key]).grid(row=row, column=f_col_lbl, sticky=anchor_w, pady=5)
         ttk.Entry(
             fin_container, textvariable=var, width=25,
-            justify=justify_text, font=app.input_font,
-        ).grid(row=row, column=f_col_ent, sticky='ew', pady=5)
+            justify=justify_text, font=app.input_font).grid(row=row, column=f_col_ent, sticky='ew', pady=5)
 
     add_fin_row(0, 'deposit_paid', deposit_var)
     add_fin_row(1, 'donation', donation_var)
@@ -414,70 +390,54 @@ def show_borrower_step(app, equipment) -> None:
             donation = float(don_val) if don_val else 0.0
 
             if not name or not id_number or not phone1:
-                messagebox.showerror(
-                    "Error", app.i18n[app.lang]['err_fill_required'],
-                )
+                ui_dialogs.error(app, app.i18n[app.lang]['err_fill_required'])
                 return
 
             if id_number != '-' and len(id_number) != 9:
-                messagebox.showerror(
-                    "Error", app.i18n[app.lang]['err_id_format'],
-                )
+                ui_dialogs.error(app, app.i18n[app.lang]['err_id_format'])
                 return
 
             if borrower_data['borrower_id']:
                 borrower_id = borrower_data['borrower_id']
                 app.db.update_borrower(
                     borrower_id, name, id_number, phone1,
-                    phone2_var.get().strip(), address_var.get().strip(),
-                )
+                    phone2_var.get().strip(), address_var.get().strip())
             else:
                 existing = app.db.get_borrower_by_id_number(id_number)
                 if existing:
                     borrower_id = existing['id']
                     app.db.update_borrower(
                         borrower_id, name, id_number, phone1,
-                        phone2_var.get().strip(), address_var.get().strip(),
-                    )
+                        phone2_var.get().strip(), address_var.get().strip())
                 else:
                     borrower_id = app.db.add_borrower(
                         name, id_number, phone1,
-                        phone2_var.get().strip(), address_var.get().strip(),
-                    )
+                        phone2_var.get().strip(), address_var.get().strip())
 
             loan_id = app.db.create_loan(
-                borrower_id, equipment['id'], deposit, donation,
-            )
+                borrower_id, equipment['id'], deposit, donation)
             loan_data = app.db.get_loan(loan_id)
 
             try:
                 pdf_path = app.reports.generate_loan_agreement(loan_data, app.lang)
                 app.reports.open_pdf(pdf_path)
-                messagebox.showinfo(
-                    "Success",
-                    app.i18n[app.lang]['success_loan_created'].format(id=loan_id),
-                )
+                ui_dialogs.info(app, app.i18n[app.lang]['success_loan_created'].format(id=loan_id))
             except Exception as e:
-                messagebox.showwarning(
-                    "Warning", f"Loan created, but agreement failed: {e}",
-                )
+                ui_dialogs.warn(app, f"Loan created, but agreement failed: {e}")
 
             clear_loan_form(app)
             app.show_dashboard()
 
         except ValueError:
-            messagebox.showerror(
-                "Error", app.i18n[app.lang]['err_invalid_deposit_donation'],
-            )
+            ui_dialogs.error(app, app.i18n[app.lang]['err_invalid_deposit_donation'])
         except Exception as e:
-            messagebox.showerror("Error", f"Failed: {e}")
+            ui_dialogs.error(app, f"Failed: {e}")
 
     ttk.Button(
         btn_frame,
         text=app.i18n[app.lang]['confirm_print'],
         style='Action.TButton',
-        command=confirm_loan_logic,
-    ).pack(fill='x', ipady=5)
+        command=confirm_loan_logic).pack(fill='x', ipady=5)
 
     # ---- Search-borrower closure ----
     def search_borrower_logic():
@@ -496,13 +456,9 @@ def show_borrower_step(app, equipment) -> None:
                 borrower_data,
                 on_select_callback=lambda: (
                     set_fields_state('disabled'),
-                    show_edit_buttons(),
-                ),
-            )
+                    show_edit_buttons()))
         else:
-            messagebox.showinfo(
-                "Not Found", app.i18n[app.lang]['borrower_not_found'],
-            )
+            ui_dialogs.info(app, app.i18n[app.lang]['borrower_not_found'])
             borrower_data['borrower_id'] = None
             set_fields_state('normal')
             hide_edit_buttons()
@@ -533,8 +489,7 @@ def _show_borrower_selection(
     ttk.Label(
         dialog,
         text=app.i18n[app.lang]['found_borrowers'],
-        font=('Helvetica', 12, 'bold'),
-    ).pack(pady=10)
+        font=('Helvetica', 12, 'bold')).pack(pady=10)
 
     cols = ['ID', 'Num', 'Name', 'IDNum', 'Phone', 'Spacer']
     visual_cols = ['Num', 'Name', 'IDNum', 'Phone']
@@ -542,8 +497,7 @@ def _show_borrower_selection(
         visual_cols = ['Spacer'] + visual_cols[::-1]
 
     tree = ttk.Treeview(
-        dialog, columns=cols, displaycolumns=visual_cols, show='headings',
-    )
+        dialog, columns=cols, displaycolumns=visual_cols, show='headings')
     tree.column('Spacer', width=1, stretch=True)
     tree.heading('Spacer', text="")
 
@@ -558,17 +512,14 @@ def _show_borrower_selection(
     for i, borrower in enumerate(borrowers, 1):
         tree.insert('', 'end', values=(
             borrower['id'], i, borrower['full_name'],
-            borrower['id_number'], borrower['primary_phone'],
-        ))
+            borrower['id_number'], borrower['primary_phone']))
 
     auto_size_treeview_columns(tree, is_rtl=app.is_rtl, fallback_size=app.base_font_size)
 
     def select_borrower():
         selection = tree.selection()
         if not selection:
-            messagebox.showwarning(
-                "Warning", app.i18n[app.lang]['warn_select_borrower'],
-            )
+            ui_dialogs.warn(app, app.i18n[app.lang]['warn_select_borrower'])
             return
 
         item = tree.item(selection[0])
@@ -592,10 +543,8 @@ def _show_borrower_selection(
     button_frame.pack(pady=10)
 
     ttk.Button(
-        button_frame, text=app.i18n[app.lang]['select'], command=select_borrower,
-    ).pack(side='left', padx=5)
+        button_frame, text=app.i18n[app.lang]['select'], command=select_borrower).pack(side='left', padx=5)
     ttk.Button(
-        button_frame, text=app.i18n[app.lang]['cancel'], command=dialog.destroy,
-    ).pack(side='left', padx=5)
+        button_frame, text=app.i18n[app.lang]['cancel'], command=dialog.destroy).pack(side='left', padx=5)
 
     setup_dialog_window(dialog, app.root, min_width=600)

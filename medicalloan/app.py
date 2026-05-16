@@ -35,8 +35,9 @@ from tkinter import font as tkfont
 from tkinter import messagebox, ttk
 
 from database import Database
+from medicalloan import preferences as prefs_mod
 from medicalloan.i18n import I18N_STRINGS
-from medicalloan.ui import styles, validators
+from medicalloan.ui import status_bar, styles, validators
 from medicalloan.ui.views import (
     borrowers as borrowers_view,
 )
@@ -99,10 +100,10 @@ def resource_path(relative_path: str) -> str:
 # into i18n in a follow-up, but that's out of scope for this PR.
 
 # Bounds for the global font-size +/- controls.
-_MIN_FONT_SIZE = 9
-_MAX_FONT_SIZE = 24
-_DEFAULT_FONT_SIZE = 14
-_DEFAULT_LANG = 'he'
+_MIN_FONT_SIZE = prefs_mod.MIN_FONT_SIZE
+_MAX_FONT_SIZE = prefs_mod.MAX_FONT_SIZE
+_DEFAULT_FONT_SIZE = prefs_mod.DEFAULT_FONT_SIZE
+_DEFAULT_LANG = prefs_mod.DEFAULT_LANG
 
 
 class MedicalEquipmentApp:
@@ -123,8 +124,23 @@ class MedicalEquipmentApp:
         self.load_configuration()
         self.reports = ReportGenerator(config=self.config)
 
+        # Path to the error log; consumed by the status bar so it can
+        # show how many bytes of new errors arrived since the last
+        # "mark as read".
+        from paths import log_file_path  # local import to avoid cycle
+        self.error_log_path = log_file_path(self.db.db_path)
+
+        # --- Persisted UI preferences (Phase 5) -------------------------
+        # Read once at startup, then mirrored onto self.lang /
+        # self.current_theme / self.base_font_size. We keep both the
+        # immutable Preferences object and the mutable per-attribute
+        # mirror so callers don't have to thread a dataclass through
+        # every Tk callback; ``_save_preferences`` re-derives the
+        # frozen object from the live state when persisting.
+        self.preferences = prefs_mod.load(self.config)
+
         # --- Theme + persistent UI state --------------------------------
-        self.current_theme: str = 'light'
+        self.current_theme: str = self.preferences.theme
 
         # Persistent ``StringVar``s so search/form text survives
         # language and font-size changes (each of which destroys and
@@ -148,14 +164,14 @@ class MedicalEquipmentApp:
 
         # --- Live font objects (font-size controls mutate these in
         # place so all widgets follow without rebuilding styles).
-        self.base_font_size: int = _DEFAULT_FONT_SIZE
+        self.base_font_size: int = self.preferences.font_size
         self.ui_font = tkfont.Font(family="Helvetica", size=self.base_font_size)
         self.input_font = tkfont.Font(
             family="Helvetica", size=self.base_font_size + 2,
         )
 
         # --- Language settings ------------------------------------------
-        self.lang: str = _DEFAULT_LANG
+        self.lang: str = self.preferences.lang
         self.is_rtl: bool = self.lang in ('he', 'ar')
         # Views still read ``app.i18n[app.lang][key]``; keep that
         # access pattern working unchanged.
@@ -167,7 +183,7 @@ class MedicalEquipmentApp:
             self.root.iconbitmap(icon_path)
         except tk.TclError:
             pass  # Use the default Tk icon if the .ico isn't present.
-        self.root.geometry("1200x700")
+        self.root.geometry(self.preferences.geometry)
 
         # --- Icons + styles --------------------------------------------
         self.load_icons()
@@ -186,6 +202,9 @@ class MedicalEquipmentApp:
             self.root.register(validators.id_input), '%P',
         )
 
+        # --- Keyboard shortcuts (Phase 5) ------------------------------
+        self._bind_global_shortcuts()
+
         # --- Clean shutdown (B15) --------------------------------------
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -194,6 +213,10 @@ class MedicalEquipmentApp:
     # ------------------------------------------------------------------
     def _on_close(self) -> None:
         """Close the DB cleanly (WAL checkpoint included) on quit."""
+        try:
+            self._save_preferences()
+        except Exception:
+            log.exception("Error saving preferences on shutdown")
         try:
             self.db.close()
         except Exception:
@@ -213,6 +236,9 @@ class MedicalEquipmentApp:
         self.config = configparser.ConfigParser()
 
         config_path = os.path.join(os.path.dirname(self.db.db_path), 'config.ini')
+        # Stash the path so ``_save_preferences`` and the status bar
+        # can rewrite the same file without recomputing the location.
+        self.config_path = config_path
 
         if not os.path.exists(config_path):
             self.config['General'] = {
@@ -228,6 +254,33 @@ class MedicalEquipmentApp:
                 self.config.write(configfile)
         else:
             self.config.read(config_path, encoding='utf-8')
+
+    # ------------------------------------------------------------------
+    # Preferences (Phase 5)
+    # ------------------------------------------------------------------
+    def _save_preferences(self) -> None:
+        """Persist current lang/theme/font/geometry into config.ini.
+
+        Called from every code path that mutates one of those values
+        (toggle_theme / set_lang / adjust_font_size / _on_close). All
+        four together is one round-trip; the file is small enough
+        that we don't try to be clever about partial writes.
+        """
+        # Geometry can only be queried while the window exists. We
+        # capture it eagerly because by the time ``_on_close`` runs
+        # the window may have already been hidden.
+        try:
+            geometry = self.root.winfo_geometry()
+        except tk.TclError:
+            geometry = self.preferences.geometry
+
+        self.preferences = prefs_mod.Preferences(
+            lang=self.lang,
+            theme=self.current_theme,
+            font_size=self.base_font_size,
+            geometry=geometry,
+        )
+        prefs_mod.save(self.config, self.preferences, self.config_path)
 
     # ------------------------------------------------------------------
     # Icons
@@ -311,6 +364,7 @@ class MedicalEquipmentApp:
         self.current_theme = 'dark' if self.current_theme == 'light' else 'light'
         self.load_icons()
         self.setup_styles(self.base_font_size)
+        self._save_preferences()
         current_view_callback()
 
     # ------------------------------------------------------------------
@@ -327,7 +381,22 @@ class MedicalEquipmentApp:
         ``current_view_callback`` is the no-arg function the bar uses
         to redraw the current screen after a setting changes -- views
         pass ``lambda: show(app)`` so the same screen rebuilds.
+
+        Phase 5 also renders the status bar at the bottom of
+        ``main_frame`` from here -- every view already calls
+        ``show_global_controls`` first thing, so wiring it once means
+        every screen gets the status strip without per-view edits.
         """
+        # Render the status bar first so it lives at the bottom; the
+        # control bar packs ``fill='x'`` at the top regardless.
+        # ``parent_frame`` is the controls' parent (always
+        # ``main_frame``), and the status bar is also a child of
+        # ``main_frame``.
+        try:
+            self.show_status_bar()
+        except Exception:
+            log.exception("Failed to render status bar")
+
         is_rtl = self.is_rtl
 
         controls_frame = ttk.Frame(parent_frame)
@@ -342,6 +411,7 @@ class MedicalEquipmentApp:
             self.is_rtl = self.lang in ('he', 'ar')
             self.root.title(self.i18n[self.lang]['window_title'])
             self.setup_styles(self.base_font_size)
+            self._save_preferences()
             current_view_callback()
 
         ttk.Button(
@@ -407,7 +477,57 @@ class MedicalEquipmentApp:
         self.ui_font.configure(size=new_size)
         self.input_font.configure(size=new_size + 2)
         self.setup_styles(self.base_font_size)
+        self._save_preferences()
         current_view_callback()
+
+    # ------------------------------------------------------------------
+    # Keyboard shortcuts (Phase 5)
+    # ------------------------------------------------------------------
+    def _bind_global_shortcuts(self) -> None:
+        """Bind app-wide accelerators on the Tk root.
+
+        Escape and Enter are intentionally *not* bound here -- they
+        belong to whichever dialog has focus, and binding them at
+        root level would steal them from the dialog. Per-dialog
+        binding lives in :func:`medicalloan.ui.dialogs.bind_dialog_keys`.
+        """
+        # ``bind_all`` makes these accelerators work no matter which
+        # widget has focus, including treeviews and entry boxes.
+        self.root.bind_all("<Control-n>", lambda _e: self.show_new_loan())
+        self.root.bind_all("<Control-N>", lambda _e: self.show_new_loan())
+        self.root.bind_all("<Control-r>", lambda _e: self.show_process_return())
+        self.root.bind_all("<Control-R>", lambda _e: self.show_process_return())
+        self.root.bind_all("<Control-i>", lambda _e: self.show_inventory())
+        self.root.bind_all("<Control-I>", lambda _e: self.show_inventory())
+        self.root.bind_all("<Control-b>", lambda _e: self.show_borrowers())
+        self.root.bind_all("<Control-B>", lambda _e: self.show_borrowers())
+        self.root.bind_all("<Control-p>", lambda _e: self.show_reports())
+        self.root.bind_all("<Control-P>", lambda _e: self.show_reports())
+        self.root.bind_all("<Control-h>", lambda _e: self.show_dashboard())
+        self.root.bind_all("<Control-H>", lambda _e: self.show_dashboard())
+
+    # ------------------------------------------------------------------
+    # Status bar (Phase 5)
+    # ------------------------------------------------------------------
+    def show_status_bar(self) -> ttk.Frame:
+        """Pack the status bar at the bottom of ``main_frame``.
+
+        Each view calls this last so the bar lives below all other
+        screen content. It re-reads the unread-error byte count on
+        every render -- cheap because it's just a stat() call.
+        """
+        return status_bar.show(self, self.main_frame)
+
+    # ------------------------------------------------------------------
+    # Restore from backup (Phase 5)
+    # ------------------------------------------------------------------
+    def restore_from_backup(self) -> None:
+        """Open the restore dialog (delegated to ``data_io``).
+
+        Lives on the app object so the dashboard popup can wire it up
+        the same way ``export_to_excel`` / ``import_from_excel`` are.
+        """
+        data_io.restore_from_backup(self)
 
     # ------------------------------------------------------------------
     # Navigation -- thin wrappers around the per-view ``show(app)`` fns

@@ -10,7 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from medicalloan.ui.dialogs import setup_dialog_window
+from medicalloan.ui.dialogs import bind_dialog_keys, setup_dialog_window
 
 
 def show(app) -> None:
@@ -36,9 +36,9 @@ def show(app) -> None:
     button_frame = ttk.Frame(app.main_frame)
     button_frame.pack(pady=30)
 
-    # NOTE: "Excel Export / Import" is intentionally hardcoded here; the
-    # legacy main.py never added an i18n key for it. Leaving it as-is
-    # keeps Phase 3 behaviour-identical; a follow-up can localise it.
+    # NOTE: "Excel Export / Import" was hardcoded English in the
+    # legacy main.py. Phase 5 wires it to ``data_management`` (the
+    # popup's title) so the button label tracks the active language.
     buttons = [
         (app.i18n[app.lang]['btn_new_loan'],
          lambda: _navigate(app, 'new_loan'),
@@ -55,7 +55,7 @@ def show(app) -> None:
         (app.i18n[app.lang]['btn_generate_reports'],
          lambda: _navigate(app, 'reports'),
          app.icon_generate_reports),
-        ("Excel Export / Import",
+        (app.i18n[app.lang].get('data_management', 'Data Management'),
          lambda: show_data_menu(app),
          app.icon_generate_reports),
     ]
@@ -77,34 +77,54 @@ def show(app) -> None:
 
 
 def show_data_menu(app) -> None:
-    """Modal popup with Export / Import / Close buttons."""
+    """Modal popup with Export / Import / Restore / Close buttons."""
     dialog = tk.Toplevel(app.root)
-    dialog.title("Data Management")
-    setup_dialog_window(dialog, app.root, min_width=300)
+    dialog.title(app.i18n[app.lang].get('data_management', 'Data Management'))
+    setup_dialog_window(dialog, app.root, min_width=320)
 
     ttk.Label(
         dialog,
-        text="Excel Data Management",
+        text=app.i18n[app.lang].get(
+            'data_management_subtitle', 'Excel Data Management',
+        ),
         font=('Helvetica', 12, 'bold'),
     ).pack(pady=15)
 
     ttk.Button(
         dialog,
-        text="📤 Export Database to Excel",
+        text="📤  " + app.i18n[app.lang].get(
+            'btn_export_excel', 'Export Database to Excel',
+        ),
         command=lambda: [dialog.destroy(), app.export_to_excel()],
         style='Action.TButton',
-        width=25,
-    ).pack(pady=10)
+        width=30,
+    ).pack(pady=8)
 
     ttk.Button(
         dialog,
-        text="📥 Import Database from Excel",
+        text="📥  " + app.i18n[app.lang].get(
+            'btn_import_excel', 'Import Database from Excel',
+        ),
         command=lambda: [dialog.destroy(), app.import_from_excel()],
         style='TButton',
-        width=25,
+        width=30,
+    ).pack(pady=8)
+
+    ttk.Button(
+        dialog,
+        text="♻  " + app.i18n[app.lang].get(
+            'btn_restore_backup', 'Restore from Backup',
+        ),
+        command=lambda: [dialog.destroy(), app.restore_from_backup()],
+        style='TButton',
+        width=30,
+    ).pack(pady=8)
+
+    ttk.Button(
+        dialog, text=app.i18n[app.lang]['close'], command=dialog.destroy,
     ).pack(pady=10)
 
-    ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+    bind_dialog_keys(dialog)
 
 
 def _navigate(app, target: str) -> None:
